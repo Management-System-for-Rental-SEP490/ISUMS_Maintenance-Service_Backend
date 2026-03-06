@@ -15,4 +15,5 @@ public interface PlanMapper {
 
     PlanHouseDto planHouseDto(PlanHouse planHouse);
     List<PlanHouseDto> planHouseDtos(List<PlanHouse> planHouses);
+
 }
