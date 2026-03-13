@@ -2,11 +2,14 @@ package com.isums.maintainservice.services;
 
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
+import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.domains.enums.JobStatus;
+import com.isums.maintainservice.domains.events.JobScheduledEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
+import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
@@ -27,6 +30,8 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final PlanHouseRepository planHouseRepository;
     private final MaintenanceMapper maintenanceMapper;
     private final MaintenanceJobRepository maintenanceJobRepository;
+    private final MaintenanceJobHistoryRepository historyRepository;
+
 
     @Override
     public List<MaintenanceJobDto> generateMaintainJobs() {
@@ -38,8 +43,15 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             List<MaintenanceJob> jobs = new ArrayList<>();
 
             for(PeriodicInspectionPlan plan : plans){
+                LocalDate periodStart = plan.getNextRunAt();
+
                 List<PlanHouse> houses = planHouseRepository.findByPlanId(plan.getId());
                 for(PlanHouse house : houses){
+                    boolean exist = maintenanceJobRepository.existsByPlanIdAndHouseIdAndPeriodStartDate(plan.getId(),house.getHouseId(),periodStart);
+
+                    if(exist){
+                        continue;
+                    }
                     MaintenanceJob job = MaintenanceJob.builder()
                             .planId(plan.getId())
                             .houseId(house.getHouseId())
@@ -95,6 +107,30 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         }
     }
 
+    @Override
+    public List<MaintenanceJobDto> getJobsByStatus(JobStatus status) {
+        List<MaintenanceJob> jobs = maintenanceJobRepository.findByStatus(status);
+        return maintenanceMapper.jobs(jobs);
+    }
+
+    @Override
+    public void markScheduled(JobScheduledEvent event) {
+        MaintenanceJob job = maintenanceJobRepository.findById(event.getJobId())
+                .orElseThrow();
+
+        if(job.getStatus() == JobStatus.SCHEDULED){
+            return;
+        }
+
+        job.setStatus(JobStatus.SCHEDULED);
+        job.setSlotId(event.getSlotId());
+
+        maintenanceJobRepository.save(job);
+
+        saveHistory(job, event);
+
+    }
+
     private LocalDate calculateNextRun(PeriodicInspectionPlan plan){
         switch (plan.getFrequencyType()){
             case MONTHLY :
@@ -107,5 +143,16 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             default:
                 throw new RuntimeException("Invalid frequency type");
         }
+    }
+
+    private void saveHistory(MaintenanceJob job,JobScheduledEvent event){
+        MaintenanceJobHistory history = new MaintenanceJobHistory();
+
+        history.setJobId(job.getId());
+        history.setAction("JOB_SCHEDULED");
+        history.setActorId(job.getAssignedStaffId());
+        history.setCreatedAt(Instant.now());
+
+        historyRepository.save(history);
     }
 }

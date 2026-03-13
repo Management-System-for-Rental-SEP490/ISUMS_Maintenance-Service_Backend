@@ -4,6 +4,7 @@ import com.isums.maintainservice.domains.dtos.ApiResponse;
 import com.isums.maintainservice.domains.dtos.ApiResponses;
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
+import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -40,4 +41,11 @@ public class MaintenanceJobController {
         MaintenanceJobDto res = maintenanceJobService.getJobById(jobId);
         return ApiResponses.ok(res,"Get job by id successfully");
     }
+
+    @GetMapping("/status")
+    public List<MaintenanceJobDto> getJobsByStatus(@RequestParam JobStatus status) {
+        return maintenanceJobService.getJobsByStatus(status);
+
+    }
+
 }
