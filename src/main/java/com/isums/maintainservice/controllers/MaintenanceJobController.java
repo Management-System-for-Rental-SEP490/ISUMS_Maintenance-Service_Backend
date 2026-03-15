@@ -3,10 +3,13 @@ package com.isums.maintainservice.controllers;
 import com.isums.maintainservice.domains.dtos.ApiResponse;
 import com.isums.maintainservice.domains.dtos.ApiResponses;
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
-import com.isums.maintainservice.domains.entities.MaintenanceJob;
+import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.JobStatus;
+import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobHistoryService;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +20,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MaintenanceJobController {
     private final MaintenanceJobService maintenanceJobService;
+    private final MaintenanceJobHistoryService maintenanceJobHistoryService;
 
     @PostMapping("/generate")
     public ApiResponse<List<MaintenanceJobDto>> generateJobs(){
@@ -48,4 +52,23 @@ public class MaintenanceJobController {
 
     }
 
+    @GetMapping("/me")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
+        UUID staffId = UUID.fromString(jwt.getSubject());
+        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(staffId);
+        return ApiResponses.ok(res,"Get my jobs successfully");
+    }
+
+    @PutMapping("/{jobId}/status")
+    public ApiResponse<MaintenanceJobDto> updateJobStatus(@PathVariable UUID jobId, @RequestParam JobStatus status){
+        MaintenanceJobDto res = maintenanceJobService.updateJobStatus(jobId,status);
+        return ApiResponses.ok(res,"Update job status successfully");
+    }
+
+    @GetMapping("/{jobId}/history")
+    public ApiResponse<List<MaintenanceJobHistory>> getJobHistory(@PathVariable UUID jobId){
+        List<MaintenanceJobHistory> res = maintenanceJobHistoryService.getJobHistory(jobId);
+        return ApiResponses.ok(res,"Get job history successfully");
+
+    }
 }

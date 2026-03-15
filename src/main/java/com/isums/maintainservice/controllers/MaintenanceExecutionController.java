@@ -39,4 +39,11 @@ public class MaintenanceExecutionController {
 
         return ApiResponses.ok(res,"Get executions successfully");
     }
+
+    @GetMapping("/house/{houseId}")
+    public ApiResponse<List<ExecutionDto>> getExecutionsByHouse(@PathVariable UUID houseId){
+        List<ExecutionDto> res =
+                maintenanceExecutionService.getExecutionsByHouseId(houseId);
+        return ApiResponses.ok(res,"Get maintenance history successfully");
+    }
 }

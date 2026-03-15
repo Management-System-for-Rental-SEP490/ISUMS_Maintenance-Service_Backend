@@ -79,4 +79,14 @@ public class MaintenanceExecutionServiceImpl implements MaintenanceExecutionServ
             throw new RuntimeException("Can't get all executions " + ex.getMessage());
         }
     }
+
+    @Override
+    public List<ExecutionDto> getExecutionsByHouseId(UUID houseId) {
+        try{
+            List<MaintenanceExecution> executions = maintenanceExecutionRepository.findByHouseIdOrderByCreatedAtDesc(houseId);
+            return maintenanceMapper.exs(executions);
+        } catch (Exception ex){
+            throw new RuntimeException("Can't get executions by house " + ex.getMessage());
+        }
+    }
 }

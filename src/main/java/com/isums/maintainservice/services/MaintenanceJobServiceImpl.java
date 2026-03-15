@@ -7,7 +7,6 @@ import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
-import com.isums.maintainservice.domains.events.JobScheduledEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
@@ -132,6 +131,44 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
     }
 
+    @Override
+    public MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus) {
+        try{
+            MaintenanceJob job = maintenanceJobRepository.findById(jobId)
+                    .orElseThrow(() -> new RuntimeException("Job not found"));
+
+            JobStatus cur = job.getStatus();
+
+            if(cur == JobStatus.SCHEDULED && newStatus == JobStatus.IN_PROGRESS){
+                job.setStatus(JobStatus.IN_PROGRESS);
+            }else if(cur == JobStatus.IN_PROGRESS && newStatus == JobStatus.COMPLETED){
+                job.setStatus(JobStatus.COMPLETED);
+            }else{
+                throw new RuntimeException("Invalid status transition");
+            }
+
+            MaintenanceJob save = maintenanceJobRepository.save(job);
+
+            saveLog(save,newStatus);
+
+            return maintenanceMapper.job(save);
+
+        } catch (Exception ex) {
+            throw new RuntimeException(" Can't update job status " + ex.getMessage());
+        }
+    }
+
+    @Override
+    public List<MaintenanceJobDto> getJobsByStaffId(UUID staffId) {
+        try{
+            List<MaintenanceJob> jobs = maintenanceJobRepository.findByAssignedStaffIdOrderByCreatedAtDesc(staffId);
+            return maintenanceMapper.jobs(jobs);
+        } catch (Exception ex) {
+            throw new RuntimeException("Can't get jobs for staff " + ex.getMessage());
+
+        }
+    }
+
     private LocalDate calculateNextRun(PeriodicInspectionPlan plan){
         switch (plan.getFrequencyType()){
             case MONTHLY :
@@ -151,6 +188,18 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
         history.setJobId(job.getId());
         history.setAction("JOB_SCHEDULED");
+        history.setActorId(job.getAssignedStaffId());
+        history.setCreatedAt(Instant.now());
+
+        historyRepository.save(history);
+    }
+
+    private void saveLog(MaintenanceJob job, JobStatus status){
+
+        MaintenanceJobHistory history = new MaintenanceJobHistory();
+
+        history.setJobId(job.getId());
+        history.setAction("JOB_" + status.name());
         history.setActorId(job.getAssignedStaffId());
         history.setCreatedAt(Instant.now());
 

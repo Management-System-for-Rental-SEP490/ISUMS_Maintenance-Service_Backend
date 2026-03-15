@@ -10,4 +10,5 @@ public interface MaintenanceExecutionService {
     ExecutionDto createExecution(UUID staffId, CreateExecutionRequest req);
     List<ExecutionDto> getExecutionsByJobId(UUID jobId);
     List<ExecutionDto> getAllExecutions();
+    List<ExecutionDto> getExecutionsByHouseId(UUID houseId);
 }

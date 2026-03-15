@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface MaintenanceExecutionRepository extends JpaRepository<MaintenanceExecution, UUID> {
     List<MaintenanceExecution> findByJobId(UUID jobId);
+    List<MaintenanceExecution> findByHouseIdOrderByCreatedAtDesc(UUID houseId);
 }
