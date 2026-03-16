@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/maintenance/planhouses")
+@RequestMapping("/api/maintenances/planhouses")
 @RequiredArgsConstructor
 public class PlanHouseController {
     private final PeriodicInspectionPlanService periodicInspectionPlanService;
