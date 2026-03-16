@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/maintenance/jobs")
+@RequestMapping("/api/maintenance/jobs")
 @RequiredArgsConstructor
 public class MaintenanceJobController {
     private final MaintenanceJobService maintenanceJobService;
@@ -52,9 +52,8 @@ public class MaintenanceJobController {
 
     }
 
-    @GetMapping("/me")
-    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
-        UUID staffId = UUID.fromString(jwt.getSubject());
+    @GetMapping("/me/{staffId}")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@PathVariable UUID staffId){
         List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(staffId);
         return ApiResponses.ok(res,"Get my jobs successfully");
     }

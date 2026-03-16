@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/maintenance/plans")
+@RequestMapping("/api/maintenance/plans")
 @RequiredArgsConstructor
 public class PeriodicInspectionPlanController {
     private final PeriodicInspectionPlanService periodicInspectionPlanService;
