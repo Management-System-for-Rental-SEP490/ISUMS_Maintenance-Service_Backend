@@ -21,37 +21,20 @@ public class JobScheduledEventListeners {
     @KafkaListener(topics = "job.scheduled", groupId = "maintenance-group")
     public void handle(JobEvent event) {
 
-        if (!event.getJobType().equals("MAINTENANCE") && !event.getJobType().equals("ISSUE")) {
+        if (!event.getReferenceType().equals("MAINTENANCE")) {
             return;
         }
-
         maintenanceJobService.markScheduled(event);
-
     }
 
     @KafkaListener(topics = "job.rescheduled", groupId = "maintenance-group")
     public void handleJobRescheduled(JobEvent event){
-
-        MaintenanceJob job = maintenanceJobRepository.findById(event.getJobId())
-                        .orElseThrow();
-
-        job.setStatus(JobStatus.SCHEDULED);
-        job.setSlotId(event.getSlotId());
-
-        maintenanceJobRepository.save(job);
-
+        maintenanceJobService.markRescheduled(event);
     }
 
     @KafkaListener(topics = "job.need-reschedule", groupId = "maintenance-group")
     public void handleNeedReschedule(JobEvent event){
-
-        MaintenanceJob job = maintenanceJobRepository.findById(event.getJobId())
-                        .orElseThrow();
-
-        job.setStatus(JobStatus.NEED_RESCHEDULE);
-
-        maintenanceJobRepository.save(job);
-
+        maintenanceJobService.markNeedReschedule(event);
     }
 
 }

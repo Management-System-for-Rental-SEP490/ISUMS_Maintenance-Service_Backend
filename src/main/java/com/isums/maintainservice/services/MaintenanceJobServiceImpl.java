@@ -115,7 +115,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
     @Override
     public void markScheduled(JobEvent event) {
-        MaintenanceJob job = maintenanceJobRepository.findById(event.getJobId())
+        MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
                 .orElseThrow();
 
         if(job.getStatus() == JobStatus.SCHEDULED){
@@ -123,12 +123,38 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         }
 
         job.setStatus(JobStatus.SCHEDULED);
+        job.setAssignedStaffId(event.getStaffId());
         job.setSlotId(event.getSlotId());
 
         maintenanceJobRepository.save(job);
 
         saveHistory(job, event);
 
+    }
+
+    @Override
+    public void markRescheduled(JobEvent event) {
+        MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
+                .orElseThrow();
+
+        job.setStatus(JobStatus.SCHEDULED);
+        job.setAssignedStaffId(event.getStaffId());
+        job.setSlotId(event.getSlotId());
+
+        maintenanceJobRepository.save(job);
+
+        saveHistory(job, event);
+    }
+
+    @Override
+    public void markNeedReschedule(JobEvent event) {
+        MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
+                .orElseThrow();
+
+        job.setStatus(JobStatus.NEED_RESCHEDULE);
+
+        maintenanceJobRepository.save(job);
+        saveHistory(job, event);
     }
 
     @Override
@@ -170,25 +196,20 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     }
 
     private LocalDate calculateNextRun(PeriodicInspectionPlan plan){
-        switch (plan.getFrequencyType()){
-            case MONTHLY :
-                return plan.getNextRunAt().plusMonths(plan.getFrequencyValue());
-            case QUARTERLY:
-                return plan.getNextRunAt().plusMonths((3L * plan.getFrequencyValue()));
-            case YEARLY:
-                return plan.getNextRunAt().plusYears(plan.getFrequencyValue());
-
-            default:
-                throw new RuntimeException("Invalid frequency type");
-        }
+        return switch (plan.getFrequencyType()) {
+            case MONTHLY -> plan.getNextRunAt().plusMonths(plan.getFrequencyValue());
+            case QUARTERLY -> plan.getNextRunAt().plusMonths((3L * plan.getFrequencyValue()));
+            case YEARLY -> plan.getNextRunAt().plusYears(plan.getFrequencyValue());
+            default -> throw new RuntimeException("Invalid frequency type");
+        };
     }
 
     private void saveHistory(MaintenanceJob job,JobEvent event){
         MaintenanceJobHistory history = new MaintenanceJobHistory();
 
         history.setJobId(job.getId());
-        history.setAction("JOB_SCHEDULED");
-        history.setActorId(job.getAssignedStaffId());
+        history.setAction(event.getAction().name());
+        history.setActorId(event.getStaffId());
         history.setCreatedAt(Instant.now());
 
         historyRepository.save(history);
