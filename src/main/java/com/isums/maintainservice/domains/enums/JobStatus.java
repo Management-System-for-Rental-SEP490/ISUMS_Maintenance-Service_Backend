@@ -4,6 +4,7 @@ public enum JobStatus {
     CREATED,
     ASSIGNING,
     SCHEDULED,
+    NEED_RESCHEDULE,
     IN_PROGRESS,
     COMPLETED,
     FAILED,

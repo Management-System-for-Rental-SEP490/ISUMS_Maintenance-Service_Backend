@@ -18,6 +18,11 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "maintenance_jobs",
+        indexes = {
+                @Index(name = "idx_job_house", columnList = "house_id"),
+                @Index(name = "idx_job_plan", columnList = "plan_id"),
+                @Index(name = "idx_job_status", columnList = "status")
+        },
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "uq_job_plan_house_period",
