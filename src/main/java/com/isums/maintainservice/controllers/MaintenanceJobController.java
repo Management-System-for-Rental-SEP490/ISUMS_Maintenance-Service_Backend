@@ -52,9 +52,9 @@ public class MaintenanceJobController {
 
     }
 
-    @GetMapping("/me/{staffId}")
-    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@PathVariable UUID staffId){
-        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(staffId);
+    @GetMapping("/me")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
+        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(jwt.getSubject());
         return ApiResponses.ok(res,"Get my jobs successfully");
     }
 

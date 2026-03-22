@@ -5,6 +5,8 @@ import com.isums.maintainservice.domains.dtos.ApiResponses;
 import com.isums.maintainservice.domains.dtos.MaintenanceExecution.CreateExecutionRequest;
 import com.isums.maintainservice.domains.dtos.MaintenanceExecution.ExecutionDto;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceExecutionService;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
+import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -18,11 +20,13 @@ import java.util.UUID;
 @RequestMapping("/api/maintenances/executions")
 public class MaintenanceExecutionController {
     private final MaintenanceExecutionService maintenanceExecutionService;
+    private final UserClientsGrpc userClientsGrpc;
+
 
     @PostMapping
     public ApiResponse<ExecutionDto> createExecution(@AuthenticationPrincipal Jwt jwt, @RequestBody CreateExecutionRequest req){
-        UUID staffId = UUID.fromString(jwt.getSubject());
-        ExecutionDto res = maintenanceExecutionService.createExecution(staffId,req);
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(jwt.getSubject());
+        ExecutionDto res = maintenanceExecutionService.createExecution(user.getId(),req);
         return ApiResponses.created(res,"Create execution successfully");
     }
 

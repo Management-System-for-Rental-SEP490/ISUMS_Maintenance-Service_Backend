@@ -17,6 +17,6 @@ public interface MaintenanceJobService {
     void markRescheduled(JobEvent event);
     void markNeedReschedule(JobEvent event);
     MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus);
-    List<MaintenanceJobDto> getJobsByStaffId(UUID staffId);
+    List<MaintenanceJobDto> getJobsByStaffId(String staffId);
 
 }

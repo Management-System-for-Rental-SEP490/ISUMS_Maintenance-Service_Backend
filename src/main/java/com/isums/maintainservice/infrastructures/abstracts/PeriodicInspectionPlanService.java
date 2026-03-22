@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface PeriodicInspectionPlanService {
-    PlanDto createPlan(UUID managerId,CreatePlanRequest req);
+    PlanDto createPlan(String managerId,CreatePlanRequest req);
     List<PlanDto> getAllPlans();
     List<PlanHouseDto> addHousesToPlan(UUID planId, List<UUID> houseIds);
     List<PlanHouseDto> getAllPlanHouse();
