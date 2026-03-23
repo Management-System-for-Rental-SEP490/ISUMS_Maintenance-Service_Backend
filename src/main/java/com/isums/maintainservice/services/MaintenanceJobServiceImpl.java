@@ -199,6 +199,16 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         }
     }
 
+    @Override
+    public List<MaintenanceJobDto> getJobsByPlanID(UUID planId) {
+        try{
+            List<MaintenanceJob> jobs = maintenanceJobRepository.findByPlanId(planId);
+            return maintenanceMapper.jobs(jobs);
+        } catch (Exception ex){
+            throw new RuntimeException("Can't get job by planId " + ex.getMessage());
+        }
+    }
+
     private LocalDate calculateNextRun(PeriodicInspectionPlan plan){
         return switch (plan.getFrequencyType()) {
             case MONTHLY -> plan.getNextRunAt().plusMonths(plan.getFrequencyValue());

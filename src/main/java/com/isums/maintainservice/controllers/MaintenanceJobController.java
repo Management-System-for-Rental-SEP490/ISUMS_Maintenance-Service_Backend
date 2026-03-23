@@ -58,6 +58,12 @@ public class MaintenanceJobController {
         return ApiResponses.ok(res,"Get my jobs successfully");
     }
 
+    @GetMapping("/plan/{planId}")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@PathVariable UUID planId){
+        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByPlanID(planId);
+        return ApiResponses.ok(res,"Get my jobs successfully");
+    }
+
     @PutMapping("/{jobId}/status")
     public ApiResponse<MaintenanceJobDto> updateJobStatus(@PathVariable UUID jobId, @RequestParam JobStatus status){
         MaintenanceJobDto res = maintenanceJobService.updateJobStatus(jobId,status);
