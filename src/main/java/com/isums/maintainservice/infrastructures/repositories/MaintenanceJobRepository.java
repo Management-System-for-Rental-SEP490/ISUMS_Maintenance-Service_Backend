@@ -13,6 +13,7 @@ public interface MaintenanceJobRepository extends JpaRepository<MaintenanceJob, 
     List<MaintenanceJob> findByHouseIdOrderByCreatedAtDesc(UUID houseId);
     List<MaintenanceJob> findByStatus(JobStatus status);
     List<MaintenanceJob> findAllByOrderByCreatedAtDesc();
+    List<MaintenanceJob> findByPlanId(UUID planId);
     boolean existsByPlanIdAndHouseIdAndPeriodStartDate(UUID planId, UUID houseId, LocalDate periodStartDate);
     List<MaintenanceJob> findByAssignedStaffIdOrderByCreatedAtDesc(UUID staffId);
 }

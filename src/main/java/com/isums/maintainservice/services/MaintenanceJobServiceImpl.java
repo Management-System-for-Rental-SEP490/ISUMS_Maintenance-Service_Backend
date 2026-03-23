@@ -8,11 +8,13 @@ import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +33,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceMapper maintenanceMapper;
     private final MaintenanceJobRepository maintenanceJobRepository;
     private final MaintenanceJobHistoryRepository historyRepository;
+    private final UserClientsGrpc userClientsGrpc;
 
 
     @Override
@@ -185,13 +188,24 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     }
 
     @Override
-    public List<MaintenanceJobDto> getJobsByStaffId(UUID staffId) {
+    public List<MaintenanceJobDto> getJobsByStaffId(String staffId) {
         try{
-            List<MaintenanceJob> jobs = maintenanceJobRepository.findByAssignedStaffIdOrderByCreatedAtDesc(staffId);
+            UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(staffId);
+            List<MaintenanceJob> jobs = maintenanceJobRepository.findByAssignedStaffIdOrderByCreatedAtDesc(UUID.fromString(user.getId()));
             return maintenanceMapper.jobs(jobs);
         } catch (Exception ex) {
             throw new RuntimeException("Can't get jobs for staff " + ex.getMessage());
 
+        }
+    }
+
+    @Override
+    public List<MaintenanceJobDto> getJobsByPlanID(UUID planId) {
+        try{
+            List<MaintenanceJob> jobs = maintenanceJobRepository.findByPlanId(planId);
+            return maintenanceMapper.jobs(jobs);
+        } catch (Exception ex){
+            throw new RuntimeException("Can't get job by planId " + ex.getMessage());
         }
     }
 

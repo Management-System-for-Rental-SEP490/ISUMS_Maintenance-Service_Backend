@@ -1,6 +1,7 @@
 package com.isums.maintainservice.infrastructures.abstracts;
 
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
+import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 
@@ -17,6 +18,7 @@ public interface MaintenanceJobService {
     void markRescheduled(JobEvent event);
     void markNeedReschedule(JobEvent event);
     MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus);
-    List<MaintenanceJobDto> getJobsByStaffId(UUID staffId);
+    List<MaintenanceJobDto> getJobsByStaffId(String staffId);
+    List<MaintenanceJobDto> getJobsByPlanID(UUID planId);
 
 }
