@@ -25,10 +25,10 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
 
 
     @Override
-    public PlanDto createPlan(UUID managerId, CreatePlanRequest req) {
+    public PlanDto createPlan(String managerId, CreatePlanRequest req) {
         try{
                 PeriodicInspectionPlan plan = PeriodicInspectionPlan.builder()
-                        .managerId(managerId)
+                        .managerId(UUID.fromString(managerId))
                         .name(req.name())
                         .frequencyType(req.frequencyType())
                         .frequencyValue(req.frequencyValue())

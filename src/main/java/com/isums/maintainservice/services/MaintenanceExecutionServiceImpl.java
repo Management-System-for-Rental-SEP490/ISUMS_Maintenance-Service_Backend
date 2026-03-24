@@ -28,7 +28,7 @@ public class MaintenanceExecutionServiceImpl implements MaintenanceExecutionServ
     private final AssetConditionProducer assetConditionProducer;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     @Override
-    public ExecutionDto createExecution(UUID staffId, CreateExecutionRequest req) {
+    public ExecutionDto createExecution(String staffId, CreateExecutionRequest req) {
         try{
             MaintenanceJob job = maintenanceJobRepository.findById(req.jobId())
                     .orElseThrow(() -> new RuntimeException("Id not found"));
@@ -37,7 +37,7 @@ public class MaintenanceExecutionServiceImpl implements MaintenanceExecutionServ
                     .job(job)
                     .houseId(req.houseId())
                     .assetId(req.assetId())
-                    .staffId(staffId)
+                    .staffId(UUID.fromString(staffId))
                     .conditionScore(req.conditionScore())
                     .notes(req.notes())
                     .createdAt(Instant.now())

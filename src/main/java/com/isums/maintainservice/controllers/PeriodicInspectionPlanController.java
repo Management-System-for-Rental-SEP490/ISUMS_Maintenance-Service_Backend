@@ -8,6 +8,8 @@ import com.isums.maintainservice.domains.dtos.PlanDTO.PlanDto;
 import com.isums.maintainservice.domains.dtos.PlanHouseDTO.AddHousesRequest;
 import com.isums.maintainservice.domains.dtos.PlanHouseDTO.PlanHouseDto;
 import com.isums.maintainservice.infrastructures.abstracts.PeriodicInspectionPlanService;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
+import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,11 +23,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PeriodicInspectionPlanController {
     private final PeriodicInspectionPlanService periodicInspectionPlanService;
+    private final UserClientsGrpc userClientsGrpc;
 
     @PostMapping
     public ApiResponse<PlanDto> createPlan(@AuthenticationPrincipal Jwt jwt,@RequestBody CreatePlanRequest request){
-        UUID managerId = UUID.fromString(jwt.getSubject());
-        PlanDto res = periodicInspectionPlanService.createPlan(managerId,request);
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(jwt.getSubject());
+        PlanDto res = periodicInspectionPlanService.createPlan(user.getId(), request);
         return ApiResponses.created(res,"Create plan successfully");
     }
 
