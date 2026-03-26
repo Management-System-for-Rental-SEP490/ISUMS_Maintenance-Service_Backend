@@ -7,8 +7,10 @@ import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
+import com.isums.maintainservice.domains.events.SlotEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
+import com.isums.maintainservice.infrastructures.kafka.SlotProducer;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
@@ -34,6 +36,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceJobRepository maintenanceJobRepository;
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
+    private final SlotProducer slotProducer;
 
 
     @Override
@@ -79,9 +82,14 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     }
 
     @Override
-    public List<MaintenanceJobDto> getAllJobs() {
+    public List<MaintenanceJobDto> getAllJobs(JobStatus status) {
         try{
-            List<MaintenanceJob> jobs = maintenanceJobRepository.findAllByOrderByCreatedAtDesc();
+            List<MaintenanceJob> jobs ;
+            if(status != null){
+                jobs = maintenanceJobRepository.findByStatus(status);
+            }else{
+                jobs = maintenanceJobRepository.findAll();
+            }
             return maintenanceMapper.jobs(jobs);
 
         } catch (Exception ex) {
@@ -110,11 +118,11 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         }
     }
 
-    @Override
-    public List<MaintenanceJobDto> getJobsByStatus(JobStatus status) {
-        List<MaintenanceJob> jobs = maintenanceJobRepository.findByStatus(status);
-        return maintenanceMapper.jobs(jobs);
-    }
+//    @Override
+//    public List<MaintenanceJobDto> getJobsByStatus(JobStatus status) {
+//        List<MaintenanceJob> jobs = maintenanceJobRepository.findByStatus(status);
+//        return maintenanceMapper.jobs(jobs);
+//    }
 
     @Override
     public void markScheduled(JobEvent event) {
@@ -177,6 +185,13 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             }
 
             MaintenanceJob save = maintenanceJobRepository.save(job);
+
+            if(newStatus == JobStatus.COMPLETED){
+                SlotEvent event = SlotEvent.builder()
+                        .slotId(save.getSlotId())
+                        .build();
+                slotProducer.sendSlotEvent(event);
+            }
 
             saveLog(save,newStatus);
 
