@@ -5,11 +5,13 @@ import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
+import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.domains.events.SlotEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
+import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.kafka.SlotProducer;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
@@ -19,13 +21,12 @@ import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepositor
 import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -37,9 +38,11 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final SlotProducer slotProducer;
+    private final JobEventProducer jobEventProducer;
 
 
     @Override
+    @Transactional
     public List<MaintenanceJobDto> generateMaintainJobs() {
         try{
             LocalDate today = LocalDate.now();
@@ -52,12 +55,20 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 LocalDate periodStart = plan.getNextRunAt();
 
                 List<PlanHouse> houses = planHouseRepository.findByPlanId(plan.getId());
-                for(PlanHouse house : houses){
-                    boolean exist = maintenanceJobRepository.existsByPlanIdAndHouseIdAndPeriodStartDate(plan.getId(),house.getHouseId(),periodStart);
 
-                    if(exist){
+                List<UUID> houseIds = houses.stream()
+                        .map(PlanHouse::getHouseId)
+                        .toList();
+
+                List<UUID> existingHouseIds = maintenanceJobRepository
+                        .findExistingHouseIds(plan.getId(), periodStart, houseIds);
+
+                Set<UUID> existingSet = new HashSet<>(existingHouseIds);
+                for(PlanHouse house : houses){
+                    if (existingSet.contains(house.getHouseId())) {
                         continue;
                     }
+
                     MaintenanceJob job = MaintenanceJob.builder()
                             .planId(plan.getId())
                             .houseId(house.getHouseId())
@@ -71,7 +82,27 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 }
                 plan.setNextRunAt(calculateNextRun(plan));
             }
+
+            if (jobs.isEmpty()) {
+                return List.of();
+            }
+
             maintenanceJobRepository.saveAll(jobs);
+
+            periodicInspectionPlanRepository.saveAll(plans);
+
+            if (!jobs.isEmpty()) {
+                for (MaintenanceJob job : jobs) {
+                    JobEvent event = JobEvent.builder()
+                            .referenceId(job.getId())
+                            .houseId(job.getHouseId())
+                            .referenceType("MAINTENANCE")
+                            .action(JobAction.JOB_CREATED)
+                            .build();
+
+                    jobEventProducer.publishJobCreated(event);
+                }
+            }
 
             return maintenanceMapper.jobs(jobs);
 
