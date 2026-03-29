@@ -10,13 +10,14 @@ import java.util.UUID;
 
 public interface MaintenanceJobService {
     List<MaintenanceJobDto> generateMaintainJobs();
-    List<MaintenanceJobDto> getAllJobs();
+    List<MaintenanceJobDto> getAllJobs(JobStatus status);
     MaintenanceJobDto getJobById(UUID jobId);
     List<MaintenanceJobDto> getJobByHouseId(UUID houseId);
-    List<MaintenanceJobDto> getJobsByStatus(JobStatus status);
+    //List<MaintenanceJobDto> getJobsByStatus(JobStatus status);
     void markScheduled(JobEvent event);
     void markRescheduled(JobEvent event);
     void markNeedReschedule(JobEvent event);
+    void markSlot(JobEvent event);
     MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus);
     List<MaintenanceJobDto> getJobsByStaffId(String staffId);
     List<MaintenanceJobDto> getJobsByPlanID(UUID planId);
