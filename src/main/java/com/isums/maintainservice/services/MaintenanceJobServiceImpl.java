@@ -200,6 +200,20 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     }
 
     @Override
+    public void markSlot(JobEvent event) {
+        MaintenanceJob job = maintenanceJobRepository.findById((event.getReferenceId()))
+                .orElseThrow(() -> new RuntimeException("Job not found"));
+
+        if (job.getSlotId() != null) {
+            return;
+        }
+        job.setSlotId(event.getSlotId());
+
+        maintenanceJobRepository.save(job);
+        saveHistory(job,event);
+    }
+
+    @Override
     public MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus) {
         try{
             MaintenanceJob job = maintenanceJobRepository.findById(jobId)
@@ -218,10 +232,15 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             MaintenanceJob save = maintenanceJobRepository.save(job);
 
             if(newStatus == JobStatus.COMPLETED){
-                SlotEvent event = SlotEvent.builder()
-                        .slotId(save.getSlotId())
+                JobEvent event = JobEvent.builder()
+                        .referenceId(jobId)
+                        .slotId(job.getSlotId())
+                        .staffId(job.getAssignedStaffId())
+                        .referenceType("MAINTENANCE")
+                        .action(JobAction.JOB_COMPLETED)
                         .build();
-                slotProducer.sendSlotEvent(event);
+
+                jobEventProducer.publishJobCompleted(event);
             }
 
             saveLog(save,newStatus);

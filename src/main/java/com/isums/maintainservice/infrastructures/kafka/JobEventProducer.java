@@ -14,4 +14,8 @@ public class JobEventProducer {
     public void publishJobCreated(JobEvent event) {
         kafkaTemplate.send("job.created", event.getReferenceId().toString(), event);
     }
+
+    public void publishJobCompleted(JobEvent event){
+        kafkaTemplate.send("job.completed", event.getReferenceId().toString(), event);
+    }
 }
