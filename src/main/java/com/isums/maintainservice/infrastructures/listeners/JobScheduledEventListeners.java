@@ -1,6 +1,7 @@
 package com.isums.maintainservice.infrastructures.listeners;
 
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
+import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.domains.events.JobNeedRescheduleEvent;
@@ -37,4 +38,10 @@ public class JobScheduledEventListeners {
         maintenanceJobService.markNeedReschedule(event);
     }
 
+    @KafkaListener(topics = "job.assigned", groupId = "maintenance-group")
+    public void handleAuto(JobEvent event){
+        if (event.getAction() == JobAction.JOB_ASSIGNED) {
+            maintenanceJobService.markSlot(event);
+        }
+    }
 }

@@ -29,8 +29,8 @@ public class MaintenanceJobController {
     }
 
     @GetMapping
-    public ApiResponse<List<MaintenanceJobDto>> getAllJobs(){
-        List<MaintenanceJobDto> res = maintenanceJobService.getAllJobs();
+    public ApiResponse<List<MaintenanceJobDto>> getAllJobs(@RequestParam(required = false) JobStatus status){
+        List<MaintenanceJobDto> res = maintenanceJobService.getAllJobs(status);
         return ApiResponses.ok(res,"Get all jobs successfully");
     }
 
@@ -46,10 +46,16 @@ public class MaintenanceJobController {
         return ApiResponses.ok(res,"Get job by id successfully");
     }
 
-    @GetMapping("/status")
-    public List<MaintenanceJobDto> getJobsByStatus(@RequestParam JobStatus status) {
-        return maintenanceJobService.getJobsByStatus(status);
+//    @GetMapping("/status")
+//    public List<MaintenanceJobDto> getJobsByStatus(@RequestParam JobStatus status) {
+//        return maintenanceJobService.getJobsByStatus(status);
+//
+//    }
 
+    @GetMapping("/me")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
+        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(jwt.getSubject());
+        return ApiResponses.ok(res,"Get my jobs successfully");
     }
 
     @GetMapping("/me")

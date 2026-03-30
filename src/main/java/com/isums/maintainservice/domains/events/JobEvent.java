@@ -15,6 +15,7 @@ import java.util.UUID;
 @Builder
 public class JobEvent {
     private UUID referenceId;
+    private UUID houseId;
     private UUID slotId;
     private UUID staffId;
     private String referenceType;
