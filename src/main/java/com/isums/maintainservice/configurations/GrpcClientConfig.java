@@ -15,9 +15,7 @@ public class GrpcClientConfig {
     }
 
     @Bean
-    HouseServiceGrpc.HouseServiceBlockingStub houseStub(
-            GrpcChannelFactory channels,
-            GrpcTokenInterceptor tokenInterceptor
+    HouseServiceGrpc.HouseServiceBlockingStub houseStub(GrpcChannelFactory channels,GrpcTokenInterceptor tokenInterceptor
     ) {
         return HouseServiceGrpc.newBlockingStub(channels.createChannel("house"))
                 .withInterceptors(tokenInterceptor);

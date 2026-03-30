@@ -58,6 +58,12 @@ public class MaintenanceJobController {
         return ApiResponses.ok(res,"Get my jobs successfully");
     }
 
+    @GetMapping("/me")
+    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
+        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(jwt.getSubject());
+        return ApiResponses.ok(res,"Get my jobs successfully");
+    }
+
     @GetMapping("/plan/{planId}")
     public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@PathVariable UUID planId){
         List<MaintenanceJobDto> res = maintenanceJobService.getJobsByPlanID(planId);
