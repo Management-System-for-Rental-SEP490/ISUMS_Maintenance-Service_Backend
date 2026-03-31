@@ -40,6 +40,9 @@ public class JobScheduledEventListeners {
 
     @KafkaListener(topics = "job.assigned", groupId = "maintenance-group")
     public void handleAuto(JobEvent event){
+        if (!"MAINTENANCE".equals(event.getReferenceType())) {
+            return;
+        }
         if (event.getAction() == JobAction.JOB_ASSIGNED) {
             maintenanceJobService.markSlot(event);
         }
