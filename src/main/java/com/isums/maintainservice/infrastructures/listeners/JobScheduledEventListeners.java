@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class JobScheduledEventListeners {
@@ -22,7 +24,7 @@ public class JobScheduledEventListeners {
     @KafkaListener(topics = "job.scheduled", groupId = "maintenance-group")
     public void handle(JobEvent event) {
 
-        if (!event.getReferenceType().equals("MAINTENANCE")) {
+        if (!List.of("MAINTENANCE", "INSPECTION").contains(event.getReferenceType())) {
             return;
         }
         maintenanceJobService.markScheduled(event);

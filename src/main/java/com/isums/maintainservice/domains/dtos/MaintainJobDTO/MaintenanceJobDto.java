@@ -11,7 +11,6 @@ public record MaintenanceJobDto(
         UUID planId,
         UUID houseId,
         LocalDate periodStartDate,
-        Instant dueDate,
         JobStatus status
 ) {
 }
