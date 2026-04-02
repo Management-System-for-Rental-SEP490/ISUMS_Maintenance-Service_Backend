@@ -73,7 +73,6 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                             .planId(plan.getId())
                             .houseId(house.getHouseId())
                             .periodStartDate(plan.getNextRunAt())
-                            .dueDate(plan.getNextRunAt().atStartOfDay().plusDays(7).toInstant(ZoneOffset.UTC))
                             .status(JobStatus.CREATED)
                             .createdAt(Instant.now())
                             .build();
@@ -158,7 +157,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     @Override
     public void markScheduled(JobEvent event) {
         MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
-                .orElseThrow();
+                .orElseThrow(() -> new RuntimeException("Job not found: " + event.getReferenceId()));
 
         if(job.getStatus() == JobStatus.SCHEDULED){
             return;

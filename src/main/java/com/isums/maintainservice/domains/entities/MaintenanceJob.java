@@ -7,6 +7,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
@@ -59,20 +61,16 @@ public class MaintenanceJob {
     @Column(name = "slot_id")
     private UUID slotId;
 
-    @Column(name = "appointment_id")
-    private UUID appointmentId;
-
     @Column(name = "period_start_date", nullable = false)
     private LocalDate periodStartDate;
-
-    @Column(name = "due_date")
-    private Instant dueDate;
 
     @Column(name = "has_issue")
     private Boolean hasIssue = false;
 
+    @CreationTimestamp
     private Instant createdAt;
 
+    @UpdateTimestamp
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "job", fetch = FetchType.LAZY)
