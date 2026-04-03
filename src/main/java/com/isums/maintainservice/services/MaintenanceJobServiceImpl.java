@@ -132,7 +132,27 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         try{
             MaintenanceJob job = maintenanceJobRepository.findById(jobId)
                     .orElseThrow(() -> new RuntimeException("Id not found"));
-            return maintenanceMapper.job(job);
+
+            String staffName = null;
+            String staffPhone = null;
+
+            if (job.getAssignedStaffId() != null) {
+                var user = userClientsGrpc.getUser(job.getAssignedStaffId().toString());
+                staffName = user.getName();
+                staffPhone = user.getPhoneNumber();
+            }
+
+            return new MaintenanceJobDto(
+                    job.getId(),
+                    job.getPlanId(),
+                    job.getHouseId(),
+                    job.getAssignedStaffId(),
+                    staffName,
+                    staffPhone,
+                    job.getPeriodStartDate(),
+                    job.getStatus()
+            );
+
         }catch (Exception ex){
             throw new RuntimeException("Can't get job" + ex.getMessage());
         }
