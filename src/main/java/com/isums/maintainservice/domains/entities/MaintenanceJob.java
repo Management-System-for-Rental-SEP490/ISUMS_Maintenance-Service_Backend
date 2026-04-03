@@ -64,9 +64,6 @@ public class MaintenanceJob {
     @Column(name = "period_start_date", nullable = false)
     private LocalDate periodStartDate;
 
-    @Column(name = "has_issue")
-    private Boolean hasIssue = false;
-
     @CreationTimestamp
     private Instant createdAt;
 
