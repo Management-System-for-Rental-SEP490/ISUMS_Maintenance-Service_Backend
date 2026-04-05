@@ -34,7 +34,7 @@ public class InspectionController {
         return ApiResponses.ok(res, "Get inspections successfully");
     }
 
-    @PatchMapping("/{id}/status")
+    @PutMapping("/{id}/status")
     public ApiResponse<InspectionDto> updateStatus(@PathVariable UUID id, @RequestBody UpdateInspectionRequest request) {
         InspectionDto res = inspectionJobService.updateStatus(id, request.status());
         return ApiResponses.ok(res, "Update inspection status successfully");

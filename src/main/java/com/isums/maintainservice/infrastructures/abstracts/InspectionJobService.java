@@ -5,6 +5,7 @@ import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
 import com.isums.maintainservice.domains.enums.JobStatus;
+import com.isums.maintainservice.domains.events.JobEvent;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,4 +15,5 @@ public interface InspectionJobService {
     List<InspectionDto> getAll(InspectionStatus status);
     InspectionDto getInspectionById(UUID inspectionId);
     InspectionDto updateStatus(UUID id, InspectionStatus newStatus);
+    void markScheduled(JobEvent event);
 }

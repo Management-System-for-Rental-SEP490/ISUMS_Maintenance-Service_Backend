@@ -56,6 +56,12 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
                 List<PlanHouse> houses = planHouseRepository.findByPlanId(plan.getId());
 
+                if (houses == null || houses.isEmpty()) {
+                    throw new RuntimeException(
+                            "Plan " + plan.getId() + " has no houses assigned"
+                    );
+                }
+
                 List<UUID> houseIds = houses.stream()
                         .map(PlanHouse::getHouseId)
                         .toList();

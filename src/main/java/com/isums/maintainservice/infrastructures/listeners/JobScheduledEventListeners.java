@@ -1,8 +1,10 @@
 package com.isums.maintainservice.infrastructures.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.isums.maintainservice.domains.entities.InspectionJob;
 import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.events.JobEvent;
+import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import java.util.List;
 public class JobScheduledEventListeners {
 
     private final MaintenanceJobService maintenanceJobService;
+    private final InspectionJobService inspectionJobService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "job.scheduled", groupId = "maintenance-group")
@@ -32,13 +35,27 @@ public class JobScheduledEventListeners {
                 return;
             }
 
-            maintenanceJobService.markScheduled(event);
+            switch (event.getReferenceType()) {
 
-            ack.acknowledge();
+                case "MAINTENANCE" -> {
+                    maintenanceJobService.markScheduled(event);
+                }
 
-            log.info("[Maintenance] JOB_SCHEDULED handled jobId={} slotId={}",
+                case "INSPECTION" -> {
+                    inspectionJobService.markScheduled(event);
+                }
+
+                default -> {
+                    log.warn("[Maintenance] Unsupported jobType={}, skip",
+                            event.getReferenceType());
+                }
+            }
+                ack.acknowledge();
+
+            log.info("[Maintenance] JOB_SCHEDULED handled jobId={} slotId={} type={}",
                     event.getReferenceId(),
-                    event.getSlotId());
+                    event.getSlotId(),
+                    event.getReferenceType());
 
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             log.error("[Maintenance] Deserialize failed raw={}: {}", record.value(), e.getMessage());

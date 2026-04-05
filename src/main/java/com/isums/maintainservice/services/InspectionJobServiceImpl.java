@@ -4,13 +4,16 @@ import com.isums.maintainservice.domains.dtos.CreateInspectionRequest;
 import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.entities.InspectionJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
+import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
 import com.isums.maintainservice.domains.enums.JobAction;
+import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
 import com.isums.maintainservice.infrastructures.repositories.InspectionJobRepository;
+import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +27,8 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     private final InspectionJobRepository inspectionJobRepository;
     private final InspectionMapper mapper;
     private final JobEventProducer jobEventProducer;
+    private final MaintenanceJobHistoryRepository historyRepository;
+
 
     @Override
     public InspectionDto create(CreateInspectionRequest request) {
@@ -110,5 +115,34 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         } catch (Exception ex) {
             throw new RuntimeException("Can't update inspection status" + ex.getMessage());
         }
+    }
+
+    @Override
+    public void markScheduled(JobEvent event) {
+        InspectionJob job = inspectionJobRepository.findById(event.getReferenceId())
+                .orElseThrow(() -> new RuntimeException("Job not found: " + event.getReferenceId()));
+
+        if(job.getStatus() == InspectionStatus.SCHEDULED){
+            return;
+        }
+
+        job.setStatus(InspectionStatus.SCHEDULED);
+        job.setAssignedStaffId(event.getStaffId());
+        job.setSlotId(event.getSlotId());
+
+        inspectionJobRepository.save(job);
+
+        saveHistory(job, event);
+    }
+
+    private void saveHistory(InspectionJob job,JobEvent event){
+        MaintenanceJobHistory history = new MaintenanceJobHistory();
+
+        history.setJobId(job.getId());
+        history.setAction(event.getAction().name());
+        history.setActorId(event.getStaffId());
+        history.setCreatedAt(Instant.now());
+
+        historyRepository.save(history);
     }
 }
