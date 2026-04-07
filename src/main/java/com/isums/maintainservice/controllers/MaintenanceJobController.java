@@ -28,6 +28,12 @@ public class MaintenanceJobController {
         return ApiResponses.created(res,"Generate jobs successfully");
     }
 
+    @PostMapping("/plans/{planId}")
+    public ApiResponse<List<MaintenanceJobDto>> generateByPlan(@PathVariable UUID planId) {
+        List<MaintenanceJobDto> res = maintenanceJobService.generateByPlan(planId);
+        return ApiResponses.created(res,"Generate jobs successfully");
+    }
+
     @GetMapping
     public ApiResponse<List<MaintenanceJobDto>> getAllJobs(@RequestParam(required = false) JobStatus status){
         List<MaintenanceJobDto> res = maintenanceJobService.getAllJobs(status);

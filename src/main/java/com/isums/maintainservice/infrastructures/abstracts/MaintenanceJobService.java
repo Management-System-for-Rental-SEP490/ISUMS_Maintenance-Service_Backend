@@ -21,5 +21,6 @@ public interface MaintenanceJobService {
     MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus);
     List<MaintenanceJobDto> getJobsByStaffId(String staffId);
     List<MaintenanceJobDto> getJobsByPlanID(UUID planId);
+    List<MaintenanceJobDto> generateByPlan(UUID planId);
 
 }
