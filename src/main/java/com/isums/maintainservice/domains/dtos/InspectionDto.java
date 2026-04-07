@@ -9,6 +9,8 @@ public record InspectionDto(
         UUID id,
         UUID houseId,
         UUID assignedStaffId,
+        String staffName,
+        String staffPhone,
         UUID slotId,
         InspectionStatus status,
         String note,

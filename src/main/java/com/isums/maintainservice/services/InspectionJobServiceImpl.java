@@ -10,6 +10,7 @@ import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
 import com.isums.maintainservice.infrastructures.repositories.InspectionJobRepository;
@@ -28,6 +29,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     private final InspectionMapper mapper;
     private final JobEventProducer jobEventProducer;
     private final MaintenanceJobHistoryRepository historyRepository;
+    private final UserClientsGrpc userClientsGrpc;
 
 
     @Override
@@ -71,7 +73,27 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         try{
             InspectionJob job = inspectionJobRepository.findById(inspectionId)
                     .orElseThrow(() -> new RuntimeException("Id not found"));
-            return mapper.toDto(job);
+
+            String staffName = null;
+            String staffPhone = null;
+
+            if(job.getAssignedStaffId() != null){
+                var user = userClientsGrpc.getUser(job.getAssignedStaffId().toString());
+                staffName = user.getName();
+                staffPhone = user.getPhoneNumber();
+            }
+            return new InspectionDto(
+                    job.getId(),
+                    job.getHouseId(),
+                    job.getAssignedStaffId(),
+                    staffName,
+                    staffPhone,
+                    job.getSlotId(),
+                    job.getStatus(),
+                    job.getNote(),
+                    job.getCreatedAt(),
+                    job.getUpdatedAt()
+            );
         } catch (Exception ex) {
             throw new RuntimeException("Can't get inspection by id" + ex.getMessage());
         }
