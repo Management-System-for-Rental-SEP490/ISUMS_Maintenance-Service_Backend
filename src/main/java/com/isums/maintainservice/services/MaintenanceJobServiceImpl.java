@@ -19,6 +19,7 @@ import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepo
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
 import com.isums.userservice.grpc.UserResponse;
+import jakarta.ws.rs.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +38,6 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceJobRepository maintenanceJobRepository;
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
-    private final SlotProducer slotProducer;
     private final JobEventProducer jobEventProducer;
 
 
@@ -57,9 +57,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 List<PlanHouse> houses = planHouseRepository.findByPlanId(plan.getId());
 
                 if (houses == null || houses.isEmpty()) {
-                    throw new RuntimeException(
-                            "Plan " + plan.getId() + " has no houses assigned"
-                    );
+                    continue;
                 }
 
                 List<UUID> houseIds = houses.stream()
@@ -70,6 +68,9 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                         .findExistingHouseIds(plan.getId(), periodStart, houseIds);
 
                 Set<UUID> existingSet = new HashSet<>(existingHouseIds);
+
+                int beforeSize = jobs.size();
+
                 for(PlanHouse house : houses){
                     if (existingSet.contains(house.getHouseId())) {
                         continue;
@@ -85,7 +86,9 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
                     jobs.add(job);
                 }
-                plan.setNextRunAt(calculateNextRun(plan));
+                if (jobs.size() > beforeSize) {
+                    plan.setNextRunAt(calculateNextRun(plan));
+                }
             }
 
             if (jobs.isEmpty()) {
@@ -202,7 +205,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     @Override
     public void markRescheduled(JobEvent event) {
         MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
-                .orElseThrow();
+                .orElseThrow(() -> new RuntimeException("Job not found: " + event.getReferenceId()));
 
         job.setStatus(JobStatus.SCHEDULED);
         job.setAssignedStaffId(event.getStaffId());
@@ -216,7 +219,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     @Override
     public void markNeedReschedule(JobEvent event) {
         MaintenanceJob job = maintenanceJobRepository.findById(event.getReferenceId())
-                .orElseThrow();
+                .orElseThrow(() -> new RuntimeException("Job not found: " + event.getReferenceId()));
 
         job.setStatus(JobStatus.NEED_RESCHEDULE);
 
@@ -271,7 +274,6 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             saveLog(save,newStatus);
 
             return maintenanceMapper.job(save);
-
         } catch (Exception ex) {
             throw new RuntimeException(" Can't update job status " + ex.getMessage());
         }
@@ -298,6 +300,74 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             throw new RuntimeException("Can't get job by planId " + ex.getMessage());
         }
     }
+
+    @Transactional
+    @Override
+    public List<MaintenanceJobDto> generateByPlan(UUID planId) {
+
+        PeriodicInspectionPlan plan = periodicInspectionPlanRepository.findById(planId)
+                .orElseThrow(() -> new RuntimeException("Plan not found"));
+
+        List<PlanHouse> houses = planHouseRepository.findByPlanId(planId);
+
+        if (houses.isEmpty()) {
+            throw new BadRequestException("Plan has no houses");
+        }
+
+        LocalDate periodStart = plan.getNextRunAt();
+
+        List<UUID> houseIds = houses.stream()
+                .map(PlanHouse::getHouseId)
+                .toList();
+
+        List<UUID> existingHouseIds = maintenanceJobRepository
+                .findExistingHouseIds(planId, periodStart, houseIds);
+
+        Set<UUID> existingSet = new HashSet<>(existingHouseIds);
+
+        List<MaintenanceJob> jobs = new ArrayList<>();
+
+        for (PlanHouse house : houses) {
+
+            if (existingSet.contains(house.getHouseId())) {
+                continue;
+            }
+
+            MaintenanceJob job = MaintenanceJob.builder()
+                    .planId(planId)
+                    .houseId(house.getHouseId())
+                    .periodStartDate(periodStart)
+                    .status(JobStatus.CREATED)
+                    .createdAt(Instant.now())
+                    .build();
+
+            jobs.add(job);
+        }
+
+        if (jobs.isEmpty()) {
+            throw new BadRequestException("All houses already have jobs for this period");
+        }
+
+        maintenanceJobRepository.saveAll(jobs);
+
+//        plan.setNextRunAt(calculateNextRun(plan));
+//        periodicInspectionPlanRepository.save(plan);
+
+        for (MaintenanceJob job : jobs) {
+            JobEvent event = JobEvent.builder()
+                    .referenceId(job.getId())
+                    .houseId(job.getHouseId())
+                    .referenceType("MAINTENANCE")
+                    .action(JobAction.JOB_CREATED)
+                    .build();
+
+            jobEventProducer.publishJobCreated(event);
+        }
+
+        return maintenanceMapper.jobs(jobs);
+    }
+
+
 
     private LocalDate calculateNextRun(PeriodicInspectionPlan plan){
         return switch (plan.getFrequencyType()) {
