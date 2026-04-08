@@ -1,6 +1,7 @@
 package com.isums.maintainservice.domains.entities;
 
 import com.isums.maintainservice.domains.enums.InspectionStatus;
+import com.isums.maintainservice.domains.enums.InspectionType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,6 +35,9 @@ public class InspectionJob {
 
     @Enumerated(EnumType.STRING)
     private InspectionStatus status;
+
+    @Enumerated(EnumType.STRING)
+    private InspectionType type;
 
     private Instant createdAt;
 
