@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-    @RequestMapping("/api/maintenances/jobs")
+@RequestMapping("/api/maintenances/jobs")
 @RequiredArgsConstructor
 public class MaintenanceJobController {
     private final MaintenanceJobService maintenanceJobService;
@@ -25,6 +25,12 @@ public class MaintenanceJobController {
     @PostMapping("/generate")
     public ApiResponse<List<MaintenanceJobDto>> generateJobs(){
         List<MaintenanceJobDto> res = maintenanceJobService.generateMaintainJobs();
+        return ApiResponses.created(res,"Generate jobs successfully");
+    }
+
+    @PostMapping("/plans/{planId}")
+    public ApiResponse<List<MaintenanceJobDto>> generateByPlan(@PathVariable UUID planId) {
+        List<MaintenanceJobDto> res = maintenanceJobService.generateByPlan(planId);
         return ApiResponses.created(res,"Generate jobs successfully");
     }
 
@@ -46,23 +52,12 @@ public class MaintenanceJobController {
         return ApiResponses.ok(res,"Get job by id successfully");
     }
 
-//    @GetMapping("/status")
-//    public List<MaintenanceJobDto> getJobsByStatus(@RequestParam JobStatus status) {
-//        return maintenanceJobService.getJobsByStatus(status);
-//
-//    }
-
     @GetMapping("/me")
     public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
         List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(jwt.getSubject());
         return ApiResponses.ok(res,"Get my jobs successfully");
     }
 
-    @GetMapping("/me")
-    public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@AuthenticationPrincipal Jwt jwt){
-        List<MaintenanceJobDto> res = maintenanceJobService.getJobsByStaffId(jwt.getSubject());
-        return ApiResponses.ok(res,"Get my jobs successfully");
-    }
 
     @GetMapping("/plan/{planId}")
     public ApiResponse<List<MaintenanceJobDto>> getMyJobs(@PathVariable UUID planId){
