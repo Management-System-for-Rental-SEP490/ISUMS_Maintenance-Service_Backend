@@ -38,6 +38,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
             InspectionJob job = InspectionJob.builder()
                     .houseId(request.houseId())
+                    .type(request.type())
                     .note(request.note())
                     .status(InspectionStatus.CREATED)
                     .createdAt(Instant.now())
@@ -90,6 +91,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                     staffPhone,
                     job.getSlotId(),
                     job.getStatus(),
+                    job.getType(),
                     job.getNote(),
                     job.getCreatedAt(),
                     job.getUpdatedAt()
