@@ -6,8 +6,10 @@ import com.isums.maintainservice.domains.entities.InspectionJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
+import com.isums.maintainservice.domains.enums.InspectionType;
 import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.enums.JobStatus;
+import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
@@ -34,7 +36,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
     @Override
     public InspectionDto create(CreateInspectionRequest request) {
-        try{
+        try {
 
             InspectionJob job = InspectionJob.builder()
                     .houseId(request.houseId())
@@ -52,9 +54,29 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         }
     }
 
+    public InspectionDto createFromEvent(JobCreatedEvent event) {
+        try {
+            InspectionJob job = InspectionJob.builder()
+                    .houseId(event.getHouseId())
+                    .type(InspectionType.valueOf(event.getType()))
+                    .note(event.getType().equals("CHECK_IN")
+                            ? "Kiểm tra nhà trước khi bàn giao"
+                            : "Kiểm tra nhà khi kết thúc hợp đồng")
+                    .status(InspectionStatus.CREATED)
+                    .contractId(event.getReferenceId())
+                    .createdAt(Instant.now())
+                    .build();
+
+            InspectionJob save = inspectionJobRepository.save(job);
+            return mapper.toDto(save);
+        } catch (Exception ex) {
+            throw new RuntimeException("Can't create inspection job: " + ex.getMessage());
+        }
+    }
+
     @Override
     public List<InspectionDto> getAll(InspectionStatus status) {
-        try{
+        try {
             List<InspectionJob> jobs;
 
             if (status != null) {
@@ -71,14 +93,14 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
     @Override
     public InspectionDto getInspectionById(UUID inspectionId) {
-        try{
+        try {
             InspectionJob job = inspectionJobRepository.findById(inspectionId)
                     .orElseThrow(() -> new RuntimeException("Id not found"));
 
             String staffName = null;
             String staffPhone = null;
 
-            if(job.getAssignedStaffId() != null){
+            if (job.getAssignedStaffId() != null) {
                 var user = userClientsGrpc.getUser(job.getAssignedStaffId().toString());
                 staffName = user.getName();
                 staffPhone = user.getPhoneNumber();
@@ -103,7 +125,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
     @Override
     public InspectionDto updateStatus(UUID id, InspectionStatus newStatus) {
-        try{
+        try {
 
             InspectionJob job = inspectionJobRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Inspection not found"));
@@ -147,7 +169,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         InspectionJob job = inspectionJobRepository.findById(event.getReferenceId())
                 .orElseThrow(() -> new RuntimeException("Job not found: " + event.getReferenceId()));
 
-        if(job.getStatus() == InspectionStatus.SCHEDULED){
+        if (job.getStatus() == InspectionStatus.SCHEDULED) {
             return;
         }
 
@@ -160,7 +182,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         saveHistory(job, event);
     }
 
-    private void saveHistory(InspectionJob job,JobEvent event){
+    private void saveHistory(InspectionJob job, JobEvent event) {
         MaintenanceJobHistory history = new MaintenanceJobHistory();
 
         history.setJobId(job.getId());

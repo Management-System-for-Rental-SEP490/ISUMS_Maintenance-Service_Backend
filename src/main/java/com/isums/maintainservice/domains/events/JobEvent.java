@@ -15,13 +15,14 @@ import java.util.UUID;
 @Builder
 public class JobEvent {
     private UUID referenceId;
-    private UUID houseId;
     private UUID slotId;
     private UUID staffId;
-    private String referenceType;
+    private UUID houseId;
     private UUID contractId;
+    private Long deductionAmount;
+    private String inspectionType;
+    private String referenceType;
+    private JobAction action;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
-    private JobAction action;
-
 }
