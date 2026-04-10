@@ -4,13 +4,15 @@ import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
+import common.paginations.dtos.PageRequest;
+import common.paginations.dtos.PageResponse;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface MaintenanceJobService {
     List<MaintenanceJobDto> generateMaintainJobs();
-    List<MaintenanceJobDto> getAllJobs(JobStatus status);
+    PageResponse<MaintenanceJobDto> getAll(PageRequest request);
     MaintenanceJobDto getJobById(UUID jobId);
     List<MaintenanceJobDto> getJobByHouseId(UUID houseId);
     //List<MaintenanceJobDto> getJobsByStatus(JobStatus status);

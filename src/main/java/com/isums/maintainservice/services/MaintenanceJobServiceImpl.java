@@ -19,11 +19,19 @@ import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepo
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
 import com.isums.userservice.grpc.UserResponse;
+import common.paginations.cache.CachedPageService;
+import common.paginations.converters.SpringPageConverter;
+import common.paginations.dtos.PageRequest;
+import common.paginations.dtos.PageResponse;
+import common.paginations.specifications.SpecificationBuilder;
 import jakarta.ws.rs.BadRequestException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.type.TypeReference;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -39,6 +47,10 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final JobEventProducer jobEventProducer;
+    private final CachedPageService cachedPageService;
+
+    private static final String PAGE_NS = "maintenances";
+    private static final Duration PAGE_TTL = Duration.ofMinutes(60);
 
 
     @Override
@@ -121,19 +133,11 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     }
 
     @Override
-    public List<MaintenanceJobDto> getAllJobs(JobStatus status) {
-        try{
-            List<MaintenanceJob> jobs ;
-            if(status != null){
-                jobs = maintenanceJobRepository.findByStatus(status);
-            }else{
-                jobs = maintenanceJobRepository.findAll();
-            }
-            return maintenanceMapper.jobs(jobs);
-
-        } catch (Exception ex) {
-            throw new RuntimeException("Can't get all jobs" + ex.getMessage());
-        }
+    public PageResponse<MaintenanceJobDto> getAll(PageRequest request) {
+        return cachedPageService.getOrLoad(PAGE_NS, request, new TypeReference<>() {
+                },
+                () -> loadPage(request)
+        );
     }
 
     @Override
@@ -376,6 +380,33 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             case YEARLY -> plan.getNextRunAt().plusYears(plan.getFrequencyValue());
             default -> throw new RuntimeException("Invalid frequency type");
         };
+    }
+
+    private PageResponse<MaintenanceJobDto> loadPage(PageRequest request) {
+        JobStatus statusFilter = request.<String>filterValue("status")
+                .map(s -> {
+                    try {
+                        return JobStatus.valueOf(s.toUpperCase().trim());
+                    } catch (IllegalArgumentException e) {
+                        return null;
+                    }
+                })
+                .orElse(null);
+
+        String statusesRaw = request.<String>filterValue("statuses").orElse(null);
+
+        String houseIdRaw = request.<String>filterValue("houseId").orElse(null);
+        UUID houseIdFilter = houseIdRaw != null ? UUID.fromString(houseIdRaw) : null;
+
+        var spec = SpecificationBuilder.<MaintenanceJob>create()
+                .keywordLike(request.keyword(), "note")
+                .enumEq("status", statusFilter)
+                .enumInRaw("status", statusesRaw, JobStatus.class)
+                .eq("houseId", houseIdFilter)
+                .build();
+        var pageable = SpringPageConverter.toPageable(request);
+        Page<MaintenanceJob> page = maintenanceJobRepository.findAll(spec, pageable);
+        return SpringPageConverter.fromPage(page, maintenanceMapper::job);
     }
 
     private void saveHistory(MaintenanceJob job,JobEvent event){
