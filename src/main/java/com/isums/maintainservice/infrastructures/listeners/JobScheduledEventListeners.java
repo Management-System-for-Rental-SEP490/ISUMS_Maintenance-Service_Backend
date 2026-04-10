@@ -1,8 +1,9 @@
 package com.isums.maintainservice.infrastructures.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.isums.maintainservice.domains.entities.InspectionJob;
+import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.enums.JobAction;
+import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
@@ -10,10 +11,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class JobScheduledEventListeners {
     private final MaintenanceJobService maintenanceJobService;
     private final InspectionJobService inspectionJobService;
     private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafka;
 
     @KafkaListener(topics = "job.scheduled", groupId = "maintenance-group")
     public void handleScheduled(ConsumerRecord<String, String> record, Acknowledgment ack) {
@@ -144,6 +148,42 @@ public class JobScheduledEventListeners {
             ack.acknowledge();
         } catch (Exception e) {
             log.error("[Maintenance] handleAssigned failed: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "job.created", groupId = "maintenance-group")
+    public void handleJobCreated(ConsumerRecord<String, String> record, Acknowledgment ack) {
+        try {
+            JobCreatedEvent event = objectMapper.readValue(
+                    record.value(), JobCreatedEvent.class);
+
+            if (!"INSPECTION".equals(event.getReferenceType())) {
+                ack.acknowledge();
+                return;
+            }
+
+            InspectionDto job = inspectionJobService.createFromEvent(event);
+
+            kafka.send("job.inspection.created",
+                    job.id().toString(),
+                    JobCreatedEvent.builder()
+                            .referenceId(job.id())
+                            .houseId(event.getHouseId())
+                            .referenceType("INSPECTION")
+                            .type(event.getType())
+                            .messageId(UUID.randomUUID().toString())
+                            .build());
+
+            ack.acknowledge();
+            log.info("[Maintenance] InspectionJob created id={} type={} contractId={}",
+                    job.id(), event.getType(), event.getReferenceId());
+
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            log.error("[Maintenance] Deserialize failed raw={}: {}", record.value(), e.getMessage());
+            ack.acknowledge();
+        } catch (Exception e) {
+            log.error("[Maintenance] handleJobCreated failed: {}", e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }
