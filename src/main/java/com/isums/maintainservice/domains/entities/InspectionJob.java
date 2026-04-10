@@ -33,6 +33,9 @@ public class InspectionJob {
 
     private String note;
 
+    @Column(name = "contract_id")
+    private UUID contractId;
+
     @Enumerated(EnumType.STRING)
     private InspectionStatus status;
 

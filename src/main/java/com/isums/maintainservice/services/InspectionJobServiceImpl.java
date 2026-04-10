@@ -128,6 +128,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                         .slotId(job.getSlotId())
                         .staffId(job.getAssignedStaffId())
                         .referenceType("INSPECTION")
+                        .contractId(job.getContractId())
                         .action(JobAction.JOB_COMPLETED)
                         .build();
 

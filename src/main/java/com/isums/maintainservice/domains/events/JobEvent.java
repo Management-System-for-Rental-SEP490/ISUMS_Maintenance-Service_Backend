@@ -19,6 +19,7 @@ public class JobEvent {
     private UUID slotId;
     private UUID staffId;
     private String referenceType;
+    private UUID contractId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private JobAction action;
