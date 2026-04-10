@@ -1,9 +1,14 @@
 package com.isums.maintainservice.controllers;
 
 import com.isums.maintainservice.domains.dtos.*;
+import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
+import common.paginations.dtos.PageRequestParams;
+import common.paginations.dtos.PageResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,9 +34,9 @@ public class InspectionController {
     }
 
     @GetMapping
-    public ApiResponse<List<InspectionDto>> getAll(@RequestParam(required = false) InspectionStatus status) {
-        List<InspectionDto> res = inspectionJobService.getAll(status);
-        return ApiResponses.ok(res, "Get inspections successfully");
+    public com.isums.maintainservice.domains.dtos.ApiResponse<PageResponse<InspectionDto>> getAll(
+            @ParameterObject @Valid @ModelAttribute PageRequestParams params) {
+        return com.isums.maintainservice.domains.dtos.ApiResponses.ok(inspectionJobService.getAll(params.toPageRequest()), "Success");
     }
 
     @PutMapping("/{id}/status")

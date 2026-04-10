@@ -7,7 +7,11 @@ import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobHistoryService;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
+import common.paginations.dtos.PageRequestParams;
+import common.paginations.dtos.PageResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -35,9 +39,9 @@ public class MaintenanceJobController {
     }
 
     @GetMapping
-    public ApiResponse<List<MaintenanceJobDto>> getAllJobs(@RequestParam(required = false) JobStatus status){
-        List<MaintenanceJobDto> res = maintenanceJobService.getAllJobs(status);
-        return ApiResponses.ok(res,"Get all jobs successfully");
+    public com.isums.maintainservice.domains.dtos.ApiResponse<PageResponse<MaintenanceJobDto>> getAll(
+            @ParameterObject @Valid @ModelAttribute PageRequestParams params) {
+        return com.isums.maintainservice.domains.dtos.ApiResponses.ok(maintenanceJobService.getAll(params.toPageRequest()), "Success");
     }
 
     @GetMapping("/house/{houseId}")

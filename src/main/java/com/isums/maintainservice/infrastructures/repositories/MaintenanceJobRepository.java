@@ -4,16 +4,15 @@ import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.enums.JobStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-public interface MaintenanceJobRepository extends JpaRepository<MaintenanceJob, UUID> {
+public interface MaintenanceJobRepository extends JpaRepository<MaintenanceJob, UUID>, JpaSpecificationExecutor<MaintenanceJob> {
     List<MaintenanceJob> findByHouseIdOrderByCreatedAtDesc(UUID houseId);
-    List<MaintenanceJob> findByStatus(JobStatus status);
-    List<MaintenanceJob> findAllByOrderByCreatedAtDesc();
     List<MaintenanceJob> findByPlanId(UUID planId);
     boolean existsByPlanIdAndHouseIdAndPeriodStartDate(UUID planId, UUID houseId, LocalDate periodStartDate);
     List<MaintenanceJob> findByAssignedStaffIdOrderByCreatedAtDesc(UUID staffId);
