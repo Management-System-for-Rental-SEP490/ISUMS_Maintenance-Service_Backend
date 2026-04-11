@@ -197,16 +197,27 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                 })
                 .orElse(null);
 
-//        String statusesRaw = request.<String>filterValue("statuses").orElse(null);
+        InspectionType typeFilter = request.<String>filterValue("type")
+                .map(t -> {
+                    try {
+                        return InspectionType.valueOf(t.toUpperCase().trim());
+                    } catch (Exception e) {
+                        return null;
+                    }
+                })
+                .orElse(null);
+
+        String statusesRaw = request.<String>filterValue("statuses").orElse(null);
 
         String houseIdRaw = request.<String>filterValue("houseId").orElse(null);
         UUID houseIdFilter = houseIdRaw != null ? UUID.fromString(houseIdRaw) : null;
 
         var spec = SpecificationBuilder.<InspectionJob>create()
-//                .keywordLike(request.keyword(), "note")
+                .keywordLike(request.keyword(), "note")
                 .enumEq("status", statusFilter)
-//                .enumInRaw("status", statusesRaw, InspectionStatus.class)
+                .enumInRaw("status", statusesRaw, InspectionStatus.class)
                 .eq("houseId", houseIdFilter)
+                .enumEq("type", typeFilter)
                 .build();
         var pageable = SpringPageConverter.toPageable(request);
         Page<InspectionJob> page = inspectionJobRepository.findAll(spec, pageable);
