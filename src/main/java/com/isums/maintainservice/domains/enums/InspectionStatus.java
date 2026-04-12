@@ -5,5 +5,6 @@ public enum InspectionStatus {
     SCHEDULED,
     IN_PROGRESS,
     DONE,
+    APPROVED,
     CANCELLED
 }
