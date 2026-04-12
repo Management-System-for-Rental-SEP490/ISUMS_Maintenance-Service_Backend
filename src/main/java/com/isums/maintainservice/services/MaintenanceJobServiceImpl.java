@@ -276,7 +276,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             }
 
             saveLog(save,newStatus);
-
+            cachedPageService.evictAll(PAGE_NS);
             return maintenanceMapper.job(save);
         } catch (Exception ex) {
             throw new RuntimeException(" Can't update job status " + ex.getMessage());
