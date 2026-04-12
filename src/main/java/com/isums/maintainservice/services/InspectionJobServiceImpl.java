@@ -161,7 +161,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
                 jobEventProducer.publishJobCompleted(event);
             }
-
+            cachedPageService.evictAll(PAGE_NS);
             return mapper.toDto(saved);
 
         } catch (Exception ex) {
