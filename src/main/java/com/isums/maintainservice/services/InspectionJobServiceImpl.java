@@ -3,12 +3,10 @@ package com.isums.maintainservice.services;
 import com.isums.maintainservice.domains.dtos.CreateInspectionRequest;
 import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.entities.InspectionJob;
-import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
 import com.isums.maintainservice.domains.enums.InspectionType;
 import com.isums.maintainservice.domains.enums.JobAction;
-import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
@@ -140,7 +138,10 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                 job.setStatus(newStatus);
             } else if (cur == InspectionStatus.IN_PROGRESS && newStatus == InspectionStatus.DONE) {
                 job.setStatus(newStatus);
-            } else {
+            } else if( cur == InspectionStatus.DONE && newStatus == InspectionStatus.APPROVED){
+                job.setStatus(newStatus);
+            }
+            else {
                 throw new RuntimeException("Invalid status transition");
             }
 
