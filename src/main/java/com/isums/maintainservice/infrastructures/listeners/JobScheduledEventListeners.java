@@ -129,19 +129,35 @@ public class JobScheduledEventListeners {
         try {
             JobEvent event = objectMapper.readValue(record.value(), JobEvent.class);
 
-            if (!"MAINTENANCE".equals(event.getReferenceType())
+            if (!List.of("MAINTENANCE", "INSPECTION").contains(event.getReferenceType())
                     || event.getAction() != JobAction.JOB_ASSIGNED) {
                 ack.acknowledge();
                 return;
             }
 
-            maintenanceJobService.markSlot(event);
+            switch (event.getReferenceType()) {
+
+                case "MAINTENANCE" -> {
+                    maintenanceJobService.markSlot(event);
+                }
+
+                case "INSPECTION" -> {
+                    inspectionJobService.markSlot(event);
+                }
+
+                default -> {
+                    log.warn("[Maintenance] Unsupported jobType={}, skip",
+                            event.getReferenceType());
+                }
+            }
+
 
             ack.acknowledge();
 
-            log.info("[Maintenance] JOB_ASSIGNED handled jobId={} slotId={}",
+            log.info("[Maintenance] JOB_ASSIGNED handled jobId={} slotId={} type={}",
                     event.getReferenceId(),
-                    event.getSlotId());
+                    event.getSlotId(),
+                    event.getReferenceType());
 
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             log.error("[Maintenance] Deserialize failed raw={}: {}", record.value(), e.getMessage());

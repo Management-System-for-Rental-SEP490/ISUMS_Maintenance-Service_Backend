@@ -20,4 +20,5 @@ public interface InspectionJobService {
     InspectionDto getInspectionById(UUID inspectionId);
     InspectionDto updateStatus(UUID id, InspectionStatus newStatus);
     void markScheduled(JobEvent event);
+    void markSlot(JobEvent event);
 }
