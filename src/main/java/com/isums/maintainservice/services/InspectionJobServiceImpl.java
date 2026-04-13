@@ -10,6 +10,8 @@ import com.isums.maintainservice.domains.enums.InspectionType;
 import com.isums.maintainservice.domains.enums.JobAction;
 import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
+import com.isums.maintainservice.exceptions.BadRequestException;
+import com.isums.maintainservice.exceptions.NotFoundException;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
@@ -144,46 +146,39 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
     @Override
     public InspectionDto updateStatus(UUID id, InspectionStatus newStatus) {
-        try {
+        InspectionJob job = inspectionJobRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inspection not found"));
 
-            InspectionJob job = inspectionJobRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Inspection not found"));
+        InspectionStatus cur = job.getStatus();
 
-            InspectionStatus cur = job.getStatus();
-
-            if (cur == InspectionStatus.SCHEDULED && newStatus == InspectionStatus.IN_PROGRESS) {
-                job.setStatus(newStatus);
-            } else if (cur == InspectionStatus.IN_PROGRESS && newStatus == InspectionStatus.DONE) {
-                job.setStatus(newStatus);
-            } else if( cur == InspectionStatus.DONE && newStatus == InspectionStatus.APPROVED){
-                job.setStatus(newStatus);
-            }
-            else {
-                throw new RuntimeException("Invalid status transition");
-            }
-
-            job.setUpdatedAt(Instant.now());
-
-            InspectionJob saved = inspectionJobRepository.save(job);
-
-            if (newStatus == InspectionStatus.DONE) {
-                JobEvent event = JobEvent.builder()
-                        .referenceId(job.getId())
-                        .slotId(job.getSlotId())
-                        .staffId(job.getAssignedStaffId())
-                        .referenceType("INSPECTION")
-                        .contractId(job.getContractId())
-                        .action(JobAction.JOB_COMPLETED)
-                        .build();
-
-                jobEventProducer.publishJobCompleted(event);
-            }
-            cachedPageService.evictAll(PAGE_NS);
-            return mapper.toDto(saved);
-
-        } catch (Exception ex) {
-            throw new RuntimeException("Can't update inspection status" + ex.getMessage());
+        if (cur == InspectionStatus.SCHEDULED && newStatus == InspectionStatus.IN_PROGRESS) {
+            job.setStatus(newStatus);
+        } else if (cur == InspectionStatus.IN_PROGRESS && newStatus == InspectionStatus.DONE) {
+            job.setStatus(newStatus);
+        } else if (cur == InspectionStatus.DONE && newStatus == InspectionStatus.APPROVED) {
+            job.setStatus(newStatus);
+        } else {
+            throw new BadRequestException("Invalid status transition");
         }
+
+        job.setUpdatedAt(Instant.now());
+
+        InspectionJob saved = inspectionJobRepository.save(job);
+
+        if (newStatus == InspectionStatus.DONE) {
+            JobEvent event = JobEvent.builder()
+                    .referenceId(job.getId())
+                    .slotId(job.getSlotId())
+                    .staffId(job.getAssignedStaffId())
+                    .referenceType("INSPECTION")
+                    .contractId(job.getContractId())
+                    .action(JobAction.JOB_COMPLETED)
+                    .build();
+
+            jobEventProducer.publishJobCompleted(event);
+        }
+        cachedPageService.evictAll(PAGE_NS);
+        return mapper.toDto(saved);
     }
 
     @Override

@@ -18,13 +18,14 @@ import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHist
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.maintainservice.exceptions.BadRequestException;
+import com.isums.maintainservice.exceptions.NotFoundException;
 import com.isums.userservice.grpc.UserResponse;
 import common.paginations.cache.CachedPageService;
 import common.paginations.converters.SpringPageConverter;
 import common.paginations.dtos.PageRequest;
 import common.paginations.dtos.PageResponse;
 import common.paginations.specifications.SpecificationBuilder;
-import jakarta.ws.rs.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -247,40 +248,36 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
     @Override
     public MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus) {
-        try{
-            MaintenanceJob job = maintenanceJobRepository.findById(jobId)
-                    .orElseThrow(() -> new RuntimeException("Job not found"));
+        MaintenanceJob job = maintenanceJobRepository.findById(jobId)
+                .orElseThrow(() -> new NotFoundException("Job not found"));
 
-            JobStatus cur = job.getStatus();
+        JobStatus cur = job.getStatus();
 
-            if(cur == JobStatus.SCHEDULED && newStatus == JobStatus.IN_PROGRESS){
-                job.setStatus(JobStatus.IN_PROGRESS);
-            }else if(cur == JobStatus.IN_PROGRESS && newStatus == JobStatus.COMPLETED){
-                job.setStatus(JobStatus.COMPLETED);
-            }else{
-                throw new RuntimeException("Invalid status transition");
-            }
-
-            MaintenanceJob save = maintenanceJobRepository.save(job);
-
-            if(newStatus == JobStatus.COMPLETED){
-                JobEvent event = JobEvent.builder()
-                        .referenceId(jobId)
-                        .slotId(job.getSlotId())
-                        .staffId(job.getAssignedStaffId())
-                        .referenceType("MAINTENANCE")
-                        .action(JobAction.JOB_COMPLETED)
-                        .build();
-
-                jobEventProducer.publishJobCompleted(event);
-            }
-
-            saveLog(save,newStatus);
-            cachedPageService.evictAll(PAGE_NS);
-            return maintenanceMapper.job(save);
-        } catch (Exception ex) {
-            throw new RuntimeException(" Can't update job status " + ex.getMessage());
+        if (cur == JobStatus.SCHEDULED && newStatus == JobStatus.IN_PROGRESS) {
+            job.setStatus(JobStatus.IN_PROGRESS);
+        } else if (cur == JobStatus.IN_PROGRESS && newStatus == JobStatus.COMPLETED) {
+            job.setStatus(JobStatus.COMPLETED);
+        } else {
+            throw new BadRequestException("Invalid status transition");
         }
+
+        MaintenanceJob save = maintenanceJobRepository.save(job);
+
+        if (newStatus == JobStatus.COMPLETED) {
+            JobEvent event = JobEvent.builder()
+                    .referenceId(jobId)
+                    .slotId(job.getSlotId())
+                    .staffId(job.getAssignedStaffId())
+                    .referenceType("MAINTENANCE")
+                    .action(JobAction.JOB_COMPLETED)
+                    .build();
+
+            jobEventProducer.publishJobCompleted(event);
+        }
+
+        saveLog(save, newStatus);
+        cachedPageService.evictAll(PAGE_NS);
+        return maintenanceMapper.job(save);
     }
 
     @Override
