@@ -3,6 +3,7 @@ package com.isums.maintainservice.services;
 import com.isums.maintainservice.domains.dtos.CreateInspectionRequest;
 import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.entities.InspectionJob;
+import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
 import com.isums.maintainservice.domains.enums.InspectionType;
@@ -58,9 +59,17 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
             InspectionJob save = inspectionJobRepository.save(job);
 
+            JobEvent assignEvent = JobEvent.builder()
+                    .referenceId(job.getId())
+                    .houseId(job.getHouseId())
+                    .referenceType("INSPECTION")
+                    .action(JobAction.JOB_CREATED)
+                    .build();
+            jobEventProducer.publishJobCreated(assignEvent);
+            cachedPageService.evictAll(PAGE_NS);
             return mapper.toDto(save);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't create inspection job" + ex.getMessage());
+            throw new RuntimeException("Can't create inspection job" + ex);
         }
     }
 
@@ -78,9 +87,17 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                     .build();
 
             InspectionJob save = inspectionJobRepository.save(job);
+            JobEvent assignEvent = JobEvent.builder()
+                    .referenceId(job.getId())
+                    .houseId(job.getHouseId())
+                    .referenceType("INSPECTION")
+                    .action(JobAction.JOB_CREATED)
+                    .build();
+            jobEventProducer.publishJobCreated(assignEvent);
+            cachedPageService.evictAll(PAGE_NS);
             return mapper.toDto(save);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't create inspection job: " + ex.getMessage());
+            throw new RuntimeException("Can't create inspection job: " + ex);
         }
     }
 
@@ -223,6 +240,20 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         var pageable = SpringPageConverter.toPageable(request);
         Page<InspectionJob> page = inspectionJobRepository.findAll(spec, pageable);
         return SpringPageConverter.fromPage(page, mapper::toDto);
+    }
+
+    @Override
+    public void markSlot(JobEvent event) {
+        InspectionJob job = inspectionJobRepository.findById((event.getReferenceId()))
+                .orElseThrow(() -> new RuntimeException("Job not found"));
+
+        if (job.getSlotId() != null) {
+            return;
+        }
+        job.setSlotId(event.getSlotId());
+
+        inspectionJobRepository.save(job);
+        saveHistory(job,event);
     }
 
     private void saveHistory(InspectionJob job, JobEvent event) {
