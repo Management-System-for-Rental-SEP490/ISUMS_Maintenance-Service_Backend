@@ -93,23 +93,23 @@ tasks.named('bootBuildImage') {
     runImage = 'paketobuildpacks/ubuntu-noble-run:latest'
 }
 
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc'
-    }
-    plugins {
-        grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java'
-        }
-    }
-    generateProtoTasks {
-        all()*.plugins {
-            grpc {
-                option '@generated=omit'
-            }
-        }
-    }
-}
+//protobuf {
+//    protoc {
+//        artifact = 'com.google.protobuf:protoc'
+//    }
+//    plugins {
+//        grpc {
+//            artifact = 'io.grpc:protoc-gen-grpc-java'
+//        }
+//    }
+//    generateProtoTasks {
+//        all()*.plugins {
+//            grpc {
+//                option '@generated=omit'
+//            }
+//        }
+//    }
+//}
 
 tasks.named('test') {
     useJUnitPlatform()
