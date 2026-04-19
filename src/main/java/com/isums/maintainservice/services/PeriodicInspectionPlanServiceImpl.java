@@ -10,6 +10,7 @@ import com.isums.maintainservice.infrastructures.abstracts.PeriodicInspectionPla
 import com.isums.maintainservice.infrastructures.mappers.PlanMapper;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.maintainservice.exceptions.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -137,15 +138,11 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
 
     @Override
     public Boolean removeHouseFromPlan(UUID planId, UUID houseId) {
-        try{
-            PlanHouse planHouse = planHouseRepository.findByPlanIdAndHouseId(planId,houseId)
-                    .orElseThrow(()-> new RuntimeException("House not found in plan"));
+        PlanHouse planHouse = planHouseRepository.findByPlanIdAndHouseId(planId, houseId)
+                    .orElseThrow(() -> new NotFoundException("House not found in plan"));
 
-            planHouseRepository.delete(planHouse);
+        planHouseRepository.delete(planHouse);
 
-            return true;
-        } catch (Exception ex) {
-            throw new RuntimeException("Can't delete house from plan" + ex.getMessage());
-        }
+        return true;
     }
 }

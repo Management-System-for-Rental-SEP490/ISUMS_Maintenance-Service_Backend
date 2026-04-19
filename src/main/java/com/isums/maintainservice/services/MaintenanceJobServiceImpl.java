@@ -1,6 +1,7 @@
 package com.isums.maintainservice.services;
 
 import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobDto;
+import com.isums.maintainservice.domains.dtos.MaintainJobDTO.MaintenanceJobStaffDto;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
@@ -35,7 +36,6 @@ import tools.jackson.core.type.TypeReference;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.*;
 
 @Service
@@ -50,7 +50,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final JobEventProducer jobEventProducer;
     private final CachedPageService cachedPageService;
 
-    private static final String PAGE_NS = "maintenances";
+    private static final String PAGE_NS = "maintenances-jobs-v3";
     private static final Duration PAGE_TTL = Duration.ofMinutes(60);
 
 
@@ -125,7 +125,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 }
             }
 
-            return maintenanceMapper.jobs(jobs);
+            return toMaintenanceJobDtos(jobs);
 
 
         } catch (Exception ex) {
@@ -147,25 +147,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             MaintenanceJob job = maintenanceJobRepository.findById(jobId)
                     .orElseThrow(() -> new RuntimeException("Id not found"));
 
-            String staffName = null;
-            String staffPhone = null;
-
-            if (job.getAssignedStaffId() != null) {
-                var user = userClientsGrpc.getUser(job.getAssignedStaffId().toString());
-                staffName = user.getName();
-                staffPhone = user.getPhoneNumber();
-            }
-
-            return new MaintenanceJobDto(
-                    job.getId(),
-                    job.getPlanId(),
-                    job.getHouseId(),
-                    job.getAssignedStaffId(),
-                    staffName,
-                    staffPhone,
-                    job.getPeriodStartDate(),
-                    job.getStatus()
-            );
+            return toMaintenanceJobDto(job);
 
         }catch (Exception ex){
             throw new RuntimeException("Can't get job" + ex.getMessage());
@@ -176,7 +158,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     public List<MaintenanceJobDto> getJobByHouseId(UUID houseId) {
         try {
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByHouseIdOrderByCreatedAtDesc(houseId);
-            return maintenanceMapper.jobs(jobs);
+            return toMaintenanceJobDtos(jobs);
         } catch (Exception ex) {
             throw new RuntimeException("Can't get job" + ex.getMessage());
         }
@@ -258,7 +240,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         } else if (cur == JobStatus.IN_PROGRESS && newStatus == JobStatus.COMPLETED) {
             job.setStatus(JobStatus.COMPLETED);
         } else {
-            throw new BadRequestException("Invalid status transition");
+            throw new BadRequestException("Invalid status transition from " + cur + " to " + newStatus);
         }
 
         MaintenanceJob save = maintenanceJobRepository.save(job);
@@ -277,7 +259,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
         saveLog(save, newStatus);
         cachedPageService.evictAll(PAGE_NS);
-        return maintenanceMapper.job(save);
+        return toMaintenanceJobDto(save);
     }
 
     @Override
@@ -285,7 +267,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         try{
             UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(staffId);
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByAssignedStaffIdOrderByCreatedAtDesc(UUID.fromString(user.getId()));
-            return maintenanceMapper.jobs(jobs);
+            return toMaintenanceJobDtos(jobs);
         } catch (Exception ex) {
             throw new RuntimeException("Can't get jobs for staff " + ex.getMessage());
 
@@ -296,7 +278,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     public List<MaintenanceJobDto> getJobsByPlanID(UUID planId) {
         try{
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByPlanId(planId);
-            return maintenanceMapper.jobs(jobs);
+            return toMaintenanceJobDtos(jobs);
         } catch (Exception ex){
             throw new RuntimeException("Can't get job by planId " + ex.getMessage());
         }
@@ -365,7 +347,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             jobEventProducer.publishJobCreated(event);
         }
 
-        return maintenanceMapper.jobs(jobs);
+        return toMaintenanceJobDtos(jobs);
     }
 
 
@@ -403,7 +385,82 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 .build();
         var pageable = SpringPageConverter.toPageable(request);
         Page<MaintenanceJob> page = maintenanceJobRepository.findAll(spec, pageable);
-        return SpringPageConverter.fromPage(page, maintenanceMapper::job);
+        Map<UUID, MaintenanceJobStaffDto> staffCache = new HashMap<>();
+        return SpringPageConverter.fromPage(page, job -> toMaintenanceJobDto(job, staffCache));
+    }
+
+    private List<MaintenanceJobDto> toMaintenanceJobDtos(List<MaintenanceJob> jobs) {
+        Map<UUID, MaintenanceJobStaffDto> staffCache = new HashMap<>();
+        return jobs.stream()
+                .map(job -> toMaintenanceJobDto(job, staffCache))
+                .toList();
+    }
+
+    private MaintenanceJobDto toMaintenanceJobDto(MaintenanceJob job) {
+        return toMaintenanceJobDto(job, new HashMap<>());
+    }
+
+    private MaintenanceJobDto toMaintenanceJobDto(MaintenanceJob job, Map<UUID, MaintenanceJobStaffDto> staffCache) {
+        MaintenanceJobStaffDto staff = resolveStaff(job.getAssignedStaffId(), staffCache);
+        return new MaintenanceJobDto(
+                job.getId(),
+                job.getPlanId(),
+                job.getHouseId(),
+                job.getAssignedStaffId(),
+                staff != null ? staff.name() : null,
+                staff != null ? staff.phoneNumber() : null,
+                staff,
+                job.getPeriodStartDate(),
+                job.getStatus()
+        );
+    }
+
+    private MaintenanceJobStaffDto resolveStaff(UUID staffId, Map<UUID, MaintenanceJobStaffDto> staffCache) {
+        if (staffId == null) {
+            return null;
+        }
+        MaintenanceJobStaffDto cached = staffCache.get(staffId);
+        if (cached != null) {
+            return cached;
+        }
+        MaintenanceJobStaffDto resolved = fetchStaff(staffId);
+        if (resolved != null) {
+            staffCache.put(staffId, resolved);
+        }
+        return resolved;
+    }
+
+    private MaintenanceJobStaffDto fetchStaff(UUID staffId) {
+        try {
+            UserResponse user = userClientsGrpc.getUser(staffId.toString());
+            List<String> roles = List.copyOf(user.getRolesList());
+            String keycloakId = normalize(user.getKeycloakId());
+            if (roles.isEmpty() && keycloakId != null) {
+                try {
+                    roles = List.copyOf(userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId).getRolesList());
+                } catch (Exception ignored) {
+                }
+            }
+            UUID resolvedStaffId = normalize(user.getId()) != null ? UUID.fromString(user.getId()) : staffId;
+            return new MaintenanceJobStaffDto(
+                    resolvedStaffId,
+                    keycloakId,
+                    normalize(user.getName()),
+                    normalize(user.getEmail()),
+                    normalize(user.getPhoneNumber()),
+                    roles,
+                    user.getIsEnabled()
+            );
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
     }
 
     private void saveHistory(MaintenanceJob job,JobEvent event){

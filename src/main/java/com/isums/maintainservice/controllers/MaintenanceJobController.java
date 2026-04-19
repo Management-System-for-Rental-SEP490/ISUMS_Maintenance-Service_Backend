@@ -71,7 +71,7 @@ public class MaintenanceJobController {
 
     @PutMapping("/{jobId}/status")
     public ApiResponse<MaintenanceJobDto> updateJobStatus(@PathVariable UUID jobId, @RequestParam JobStatus status){
-        MaintenanceJobDto res = maintenanceJobService.updateJobStatus(jobId,status);
+        MaintenanceJobDto res = maintenanceJobService.updateJobStatus(jobId, status);
         return ApiResponses.ok(res,"Update job status successfully");
     }
 
