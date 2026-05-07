@@ -1,6 +1,8 @@
 package com.isums.maintainservice.domains.entities;
 
 import com.isums.maintainservice.domains.enums.FrequencyType;
+import common.i18n.TranslationMap;
+import common.i18n.TranslationMapConverter;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +38,13 @@ public class PeriodicInspectionPlan {
 
     @Column(nullable = false)
     private String name;
+
+    @Column(name = "name_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap nameTranslations;
+
+    @Column(name = "source_language", length = 8)
+    private String sourceLanguage;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "frequency_type", nullable = false)

@@ -16,10 +16,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/actuator/prometheus",
-                                "/api/users/v3/api-docs",
-                                "/api/users/v3/api-docs/**",
-                                "/api/users/swagger",
-                                "/api/users/swagger/**",
+                                "/api/maintenances/v3/api-docs",
+                                "/api/maintenances/v3/api-docs/**",
+                                "/api/maintenances/swagger",
+                                "/api/maintenances/swagger/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs",

@@ -7,9 +7,13 @@ import com.isums.maintainservice.domains.dtos.PlanHouseDTO.PlanHouseDto;
 import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.infrastructures.abstracts.PeriodicInspectionPlanService;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
+import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.maintainservice.infrastructures.mappers.PlanMapper;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.maintainservice.exceptions.NotFoundException;
+import common.i18n.TranslationMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,17 +23,26 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlanService {
+    private static final String DEFAULT_LANGUAGE = "vi";
+
     private final PeriodicInspectionPlanRepository periodicInspectionPlanRepository;
     private final PlanMapper planMapper;
     private final PlanHouseRepository planHouseRepository;
+    private final UserClientsGrpc userClientsGrpc;
+    private final TranslationAutoFillService translationAutoFillService;
 
 
     @Override
     public PlanDto createPlan(String managerId, CreatePlanRequest req) {
         try{
+                String sourceLanguage = resolveUserLanguage(managerId);
+                TranslationMap nameTranslations = translationAutoFillService.complete(req.name(), sourceLanguage);
+
                 PeriodicInspectionPlan plan = PeriodicInspectionPlan.builder()
                         .managerId(UUID.fromString(managerId))
                         .name(req.name())
+                        .nameTranslations(nameTranslations)
+                        .sourceLanguage(sourceLanguage)
                         .frequencyType(req.frequencyType())
                         .frequencyValue(req.frequencyValue())
                         .effectiveFrom(req.effectiveFrom())
@@ -40,11 +53,11 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
                         .updatedAt(Instant.now())
                         .build();
 
-                PeriodicInspectionPlan created =periodicInspectionPlanRepository.save(plan);
+                PeriodicInspectionPlan created = periodicInspectionPlanRepository.save(plan);
 
                 return planMapper.plan(created);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't create plan" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_CREATE_PLAN + ": " + ex.getMessage());
         }
     }
 
@@ -54,7 +67,7 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
             List<PeriodicInspectionPlan> plans = periodicInspectionPlanRepository.findAll();
             return planMapper.plans(plans);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get all plans" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_PLANS + ": " + ex.getMessage());
         }
     }
 
@@ -62,7 +75,7 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
     public List<PlanHouseDto> addHousesToPlan(UUID planId, List<UUID> houseIds) {
         try{
             if (!periodicInspectionPlanRepository.existsById(planId)) {
-                throw new RuntimeException("Plan not found");
+                throw new NotFoundException(MaintenanceMessageKeys.PLAN_NOT_FOUND);
             }
 
             Set<UUID> uniqueHouseIds = new HashSet<>(houseIds);
@@ -93,8 +106,10 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
 
             return planMapper.planHouseDtos(planHouses);
 
+        } catch (NotFoundException ex) {
+            throw ex;
         } catch (Exception ex) {
-            throw new RuntimeException("Can't not add plan to house" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_ADD_HOUSES_TO_PLAN + ": " + ex.getMessage());
         }
     }
 
@@ -104,7 +119,7 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
             List<PlanHouse> planHouses = planHouseRepository.findAll();
             return planMapper.planHouseDtos(planHouses);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get all plan house" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_PLAN_HOUSES + ": " + ex.getMessage());
         }
     }
 
@@ -112,7 +127,7 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
     public PlanDetailDto getPlanById(UUID planId) {
         try{
             PeriodicInspectionPlan plan = periodicInspectionPlanRepository.findById(planId)
-                    .orElseThrow(() -> new RuntimeException("Plan not found"));
+                    .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.PLAN_NOT_FOUND));
             List<PlanHouse> planHouses = planHouseRepository.findByPlanId(planId);
 
             List<UUID> houseIds = planHouses.stream()
@@ -121,7 +136,7 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
 
             return new PlanDetailDto(
                     plan.getId(),
-                    plan.getName(),
+                    resolveName(plan),
                     plan.getFrequencyType(),
                     plan.getFrequencyValue(),
                     plan.getEffectiveFrom(),
@@ -130,22 +145,38 @@ public class PeriodicInspectionPlanServiceImpl implements PeriodicInspectionPlan
                     houseIds
             );
 
+        } catch (NotFoundException ex) {
+            throw ex;
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get plan information" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_PLAN_INFO + ": " + ex.getMessage());
         }
     }
 
     @Override
     public Boolean removeHouseFromPlan(UUID planId, UUID houseId) {
-        try{
-            PlanHouse planHouse = planHouseRepository.findByPlanIdAndHouseId(planId,houseId)
-                    .orElseThrow(()-> new RuntimeException("House not found in plan"));
+        PlanHouse planHouse = planHouseRepository.findByPlanIdAndHouseId(planId, houseId)
+                    .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.HOUSE_NOT_IN_PLAN));
 
-            planHouseRepository.delete(planHouse);
+        planHouseRepository.delete(planHouse);
 
-            return true;
+        return true;
+    }
+
+    private String resolveUserLanguage(String userId) {
+        try {
+            String lang = userClientsGrpc.getUser(userId).getLanguage();
+            if (lang == null || lang.isBlank()) return DEFAULT_LANGUAGE;
+            return lang.trim().toLowerCase(Locale.ROOT);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't delete house from plan" + ex.getMessage());
+            return DEFAULT_LANGUAGE;
         }
+    }
+
+    private static String resolveName(PeriodicInspectionPlan plan) {
+        if (plan.getNameTranslations() != null) {
+            String resolved = plan.getNameTranslations().resolve();
+            if (resolved != null && !resolved.isBlank()) return resolved;
+        }
+        return plan.getName();
     }
 }

@@ -39,16 +39,15 @@ public class MaintenanceGrpcImpl extends MaintenanceServiceGrpc.MaintenanceServi
                 return;
             }
 
-            UUID houseId;
-            MaintenanceJob maintenanceJob = maintenanceJobRepository.findById(jobId).orElse(null);
-
-            if (maintenanceJob != null) {
-                houseId = maintenanceJob.getHouseId();
-            } else {
-                InspectionJob inspectionJob = inspectionJobRepository.findById(jobId)
-                        .orElseThrow(() -> new RuntimeException("Job not found"));
-                houseId = inspectionJob.getHouseId();
-            }
+            UUID houseId = maintenanceJobRepository.findById(jobId)
+                    .map(MaintenanceJob::getHouseId)
+                    .or(() -> inspectionJobRepository.findById(jobId)
+                            .map(InspectionJob::getHouseId))
+                    .orElseThrow(() ->
+                            Status.NOT_FOUND
+                                    .withDescription("Job not found: " + jobId)
+                                    .asRuntimeException()
+                    );
 
             GetJobResponse response = GetJobResponse.newBuilder()
                     .setJobId(jobId.toString())
