@@ -26,6 +26,7 @@ import common.paginations.dtos.PageRequest;
 import common.paginations.dtos.PageResponse;
 import common.paginations.specifications.SpecificationBuilder;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,6 +43,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InspectionJobServiceImpl implements InspectionJobService {
     private final InspectionJobRepository inspectionJobRepository;
     private final InspectionMapper mapper;
@@ -316,6 +318,35 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         inspectionJobRepository.save(job);
         saveHistory(job,event);
         cachedPageService.evictAll(PAGE_NS);
+    }
+
+    @Override
+    public void markPendingManagerReview(UUID contractId) {
+        if (contractId == null) {
+            log.warn("[Inspection] markPendingManagerReview called with null contractId");
+            return;
+        }
+        java.util.List<InspectionStatus> openStatuses = java.util.List.of(
+                InspectionStatus.CREATED,
+                InspectionStatus.SCHEDULED,
+                InspectionStatus.IN_PROGRESS,
+                InspectionStatus.PENDING_MANAGER_REVIEW
+        );
+        InspectionJob job = inspectionJobRepository
+                .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(contractId, openStatuses)
+                .orElse(null);
+        if (job == null) {
+            log.warn("[Inspection] No open inspection job for contractId={}, skip done transition",
+                    contractId);
+            return;
+        }
+        InspectionStatus prev = job.getStatus();
+        job.setStatus(InspectionStatus.DONE);
+        job.setUpdatedAt(java.time.Instant.now());
+        inspectionJobRepository.save(job);
+        cachedPageService.evictAll(PAGE_NS);
+        log.info("[Inspection] markDoneAfterRelocationReport jobId={} contractId={} prev={}",
+                job.getId(), contractId, prev);
     }
 
     private void saveHistory(InspectionJob job, JobEvent event) {

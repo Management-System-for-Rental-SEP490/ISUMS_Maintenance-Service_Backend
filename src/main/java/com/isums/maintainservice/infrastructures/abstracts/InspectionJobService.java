@@ -23,4 +23,5 @@ public interface InspectionJobService {
     InspectionDto uploadHousePhotos(UUID inspectionId, List<MultipartFile> files);
     void markScheduled(JobEvent event);
     void markSlot(JobEvent event);
+    void markPendingManagerReview(UUID contractId);
 }
