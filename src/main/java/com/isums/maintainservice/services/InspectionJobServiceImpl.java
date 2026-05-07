@@ -12,12 +12,14 @@ import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.exceptions.BadRequestException;
 import com.isums.maintainservice.exceptions.NotFoundException;
+import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
 import com.isums.maintainservice.infrastructures.repositories.InspectionJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
+import common.i18n.TranslationMap;
 import common.paginations.cache.CachedPageService;
 import common.paginations.converters.SpringPageConverter;
 import common.paginations.dtos.PageRequest;
@@ -26,11 +28,16 @@ import common.paginations.specifications.SpecificationBuilder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.core.type.TypeReference;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -42,19 +49,25 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final CachedPageService cachedPageService;
+    private final TranslationAutoFillService translationAutoFillService;
+    private final S3ServiceImpl s3Service;
 
     private static final String PAGE_NS = "inspections";
     private static final Duration PAGE_TTL = Duration.ofMinutes(60);
-
+    private static final String DEFAULT_LANGUAGE = "vi";
 
     @Override
-    public InspectionDto create(CreateInspectionRequest request) {
+    public InspectionDto create(String creatorKeycloakId, CreateInspectionRequest request) {
         try {
+            String sourceLanguage = resolveUserLanguageFromKeycloak(creatorKeycloakId);
+            TranslationMap noteTranslations = translationAutoFillService.complete(request.note(), sourceLanguage);
 
             InspectionJob job = InspectionJob.builder()
                     .houseId(request.houseId())
                     .type(request.type())
                     .note(request.note())
+                    .noteTranslations(noteTranslations)
+                    .sourceLanguage(sourceLanguage)
                     .status(InspectionStatus.CREATED)
                     .createdAt(Instant.now())
                     .build();
@@ -71,18 +84,23 @@ public class InspectionJobServiceImpl implements InspectionJobService {
             cachedPageService.evictAll(PAGE_NS);
             return mapper.toDto(save);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't create inspection job" + ex);
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_CREATE_INSPECTION + ": " + ex);
         }
     }
 
     public InspectionDto createFromEvent(JobCreatedEvent event) {
         try {
+            String noteVi = event.getType().equals("CHECK_IN")
+                    ? "Pre-handover house inspection"
+                    : "End-of-contract house inspection";
+            TranslationMap noteTranslations = translationAutoFillService.complete(noteVi, DEFAULT_LANGUAGE);
+
             InspectionJob job = InspectionJob.builder()
                     .houseId(event.getHouseId())
                     .type(InspectionType.valueOf(event.getType()))
-                    .note(event.getType().equals("CHECK_IN")
-                            ? "Kiểm tra nhà trước khi bàn giao"
-                            : "Kiểm tra nhà khi kết thúc hợp đồng")
+                    .note(noteVi)
+                    .noteTranslations(noteTranslations)
+                    .sourceLanguage(DEFAULT_LANGUAGE)
                     .status(InspectionStatus.CREATED)
                     .contractId(event.getReferenceId())
                     .createdAt(Instant.now())
@@ -99,24 +117,23 @@ public class InspectionJobServiceImpl implements InspectionJobService {
             cachedPageService.evictAll(PAGE_NS);
             return mapper.toDto(save);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't create inspection job: " + ex);
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_CREATE_INSPECTION + ": " + ex);
         }
     }
 
     @Override
     public PageResponse<InspectionDto> getAll(PageRequest request) {
-        return cachedPageService.getOrLoad(PAGE_NS, request, new TypeReference<>() {
+        return cachedPageService.getOrLoad(PAGE_NS + ":" + TranslationMap.currentLanguage(), request, new TypeReference<>() {
                 },
                 () -> loadPage(request)
         );
     }
 
-
     @Override
     public InspectionDto getInspectionById(UUID inspectionId) {
         try {
             InspectionJob job = inspectionJobRepository.findById(inspectionId)
-                    .orElseThrow(() -> new RuntimeException("Id not found"));
+                    .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.INSPECTION_NOT_FOUND));
 
             String staffName = null;
             String staffPhone = null;
@@ -129,25 +146,73 @@ public class InspectionJobServiceImpl implements InspectionJobService {
             return new InspectionDto(
                     job.getId(),
                     job.getHouseId(),
+                    job.getContractId(),
                     job.getAssignedStaffId(),
                     staffName,
                     staffPhone,
                     job.getSlotId(),
                     job.getStatus(),
                     job.getType(),
-                    job.getNote(),
+                    resolveNote(job),
+                    resolveHousePhotoUrls(job),
                     job.getCreatedAt(),
                     job.getUpdatedAt()
             );
+        } catch (NotFoundException ex) {
+            throw ex;
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get inspection by id" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_INSPECTION + ": " + ex.getMessage());
         }
+    }
+
+    @Override
+    public InspectionDto uploadHousePhotos(UUID inspectionId, List<MultipartFile> files) {
+        InspectionJob job = inspectionJobRepository.findById(inspectionId)
+                .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.INSPECTION_NOT_FOUND));
+
+        InspectionStatus cur = job.getStatus();
+        if (cur != InspectionStatus.IN_PROGRESS && cur != InspectionStatus.DONE) {
+            throw new BadRequestException(MaintenanceMessageKeys.INVALID_STATUS_TRANSITION, cur, InspectionStatus.IN_PROGRESS);
+        }
+
+        if (files == null || files.isEmpty()) {
+            throw new BadRequestException(MaintenanceMessageKeys.INSPECTION_PHOTOS_EMPTY);
+        }
+
+        List<String> existing = job.getHousePhotoKeys();
+        if (existing == null) existing = new ArrayList<>();
+        String folder = "inspections/" + job.getId();
+        List<String> newKeys = new ArrayList<>();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) continue;
+            newKeys.add(s3Service.upload(file, folder));
+        }
+        if (newKeys.isEmpty()) {
+            throw new BadRequestException(MaintenanceMessageKeys.INSPECTION_PHOTOS_EMPTY);
+        }
+
+        existing.addAll(newKeys);
+        job.setHousePhotoKeys(existing);
+        job.setUpdatedAt(Instant.now());
+        InspectionJob saved = inspectionJobRepository.save(job);
+        cachedPageService.evictAll(PAGE_NS);
+        return mapper.toDto(saved);
+    }
+
+    private List<String> resolveHousePhotoUrls(InspectionJob job) {
+        if (job == null || job.getHousePhotoKeys() == null || job.getHousePhotoKeys().isEmpty()) {
+            return Collections.emptyList();
+        }
+        return job.getHousePhotoKeys().parallelStream()
+                .map(s3Service::getImageUrl)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Override
     public InspectionDto updateStatus(UUID id, InspectionStatus newStatus) {
         InspectionJob job = inspectionJobRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Inspection not found"));
+                .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.INSPECTION_NOT_FOUND));
 
         InspectionStatus cur = job.getStatus();
 
@@ -158,7 +223,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         } else if (cur == InspectionStatus.DONE && newStatus == InspectionStatus.APPROVED) {
             job.setStatus(newStatus);
         } else {
-            throw new BadRequestException("Invalid status transition");
+            throw new BadRequestException(MaintenanceMessageKeys.INVALID_STATUS_TRANSITION, cur, newStatus);
         }
 
         job.setUpdatedAt(Instant.now());
@@ -197,6 +262,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
         inspectionJobRepository.save(job);
 
         saveHistory(job, event);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     private PageResponse<InspectionDto> loadPage(PageRequest request) {
@@ -249,6 +315,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
         inspectionJobRepository.save(job);
         saveHistory(job,event);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     private void saveHistory(InspectionJob job, JobEvent event) {
@@ -261,4 +328,23 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
         historyRepository.save(history);
     }
+
+    private String resolveUserLanguageFromKeycloak(String keycloakId) {
+        try {
+            String lang = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId).getLanguage();
+            if (lang == null || lang.isBlank()) return DEFAULT_LANGUAGE;
+            return lang.trim().toLowerCase(Locale.ROOT);
+        } catch (Exception ex) {
+            return DEFAULT_LANGUAGE;
+        }
+    }
+
+    private static String resolveNote(InspectionJob job) {
+        if (job.getNoteTranslations() != null) {
+            String resolved = job.getNoteTranslations().resolve();
+            if (resolved != null && !resolved.isBlank()) return resolved;
+        }
+        return job.getNote();
+    }
 }
+

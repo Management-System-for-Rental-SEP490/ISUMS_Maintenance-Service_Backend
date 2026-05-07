@@ -7,9 +7,12 @@ import com.isums.maintainservice.domains.dtos.PlanHouseDTO.PlanHouseDto;
 import com.isums.maintainservice.domains.entities.PeriodicInspectionPlan;
 import com.isums.maintainservice.domains.entities.PlanHouse;
 import com.isums.maintainservice.domains.enums.FrequencyType;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.mappers.PlanMapper;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.userservice.grpc.UserResponse;
+import common.i18n.TranslationMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -29,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +44,8 @@ class PeriodicInspectionPlanServiceImplTest {
     @Mock private PeriodicInspectionPlanRepository periodicInspectionPlanRepository;
     @Mock private PlanMapper planMapper;
     @Mock private PlanHouseRepository planHouseRepository;
+    @Mock private UserClientsGrpc userClientsGrpc;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks private PeriodicInspectionPlanServiceImpl service;
 
@@ -49,6 +56,13 @@ class PeriodicInspectionPlanServiceImplTest {
         planId = UUID.randomUUID();
         houseId = UUID.randomUUID();
         managerId = UUID.randomUUID();
+        // createPlan resolves the caller's language via gRPC and fills the
+        // name translations map. Lenient stubs so other non-create tests
+        // don't trip strict stubbing.
+        lenient().when(userClientsGrpc.getUser(anyString()))
+                .thenReturn(UserResponse.newBuilder().setLanguage("vi").build());
+        lenient().when(translationAutoFillService.complete(any(), anyString()))
+                .thenReturn(new TranslationMap());
     }
 
     @Nested

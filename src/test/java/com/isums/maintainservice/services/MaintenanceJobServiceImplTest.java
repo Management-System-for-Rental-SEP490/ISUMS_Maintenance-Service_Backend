@@ -17,7 +17,10 @@ import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHist
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.PeriodicInspectionPlanRepository;
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
+import com.isums.userservice.grpc.UserResponse;
 import common.paginations.cache.CachedPageService;
+import common.paginations.dtos.PageRequest;
+import common.paginations.dtos.PageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -32,12 +35,15 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -90,7 +96,6 @@ class MaintenanceJobServiceImplTest {
             when(maintenanceJobRepository.findExistingHouseIds(planId, p.getNextRunAt(), List.of(houseId)))
                     .thenReturn(List.of());
             when(maintenanceJobRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
-            when(maintenanceMapper.jobs(anyList())).thenReturn(List.of());
 
             service.generateMaintainJobs();
 
@@ -138,7 +143,6 @@ class MaintenanceJobServiceImplTest {
             when(planHouseRepository.findByPlanId(planId)).thenReturn(List.of(h1));
             when(maintenanceJobRepository.findExistingHouseIds(any(), any(), any())).thenReturn(List.of());
             when(maintenanceJobRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
-            when(maintenanceMapper.jobs(anyList())).thenReturn(List.of());
 
             service.generateMaintainJobs();
 
@@ -199,7 +203,6 @@ class MaintenanceJobServiceImplTest {
             when(planHouseRepository.findByPlanId(planId)).thenReturn(List.of(h1, h2));
             when(maintenanceJobRepository.findExistingHouseIds(any(), any(), any())).thenReturn(List.of());
             when(maintenanceJobRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
-            when(maintenanceMapper.jobs(anyList())).thenReturn(List.of());
 
             service.generateByPlan(planId);
 
@@ -213,7 +216,7 @@ class MaintenanceJobServiceImplTest {
 
             assertThatThrownBy(() -> service.generateByPlan(planId))
                     .isInstanceOf(RuntimeException.class)
-                    .hasMessageContaining("Plan not found");
+                    .hasMessageContaining("planNotFound");
         }
     }
 
@@ -229,7 +232,6 @@ class MaintenanceJobServiceImplTest {
 
             when(maintenanceJobRepository.findById(jobId)).thenReturn(Optional.of(job));
             when(maintenanceJobRepository.save(job)).thenReturn(job);
-            when(maintenanceMapper.job(job)).thenReturn(stubDto(jobId));
 
             service.updateJobStatus(jobId, JobStatus.IN_PROGRESS);
 
@@ -247,7 +249,6 @@ class MaintenanceJobServiceImplTest {
 
             when(maintenanceJobRepository.findById(jobId)).thenReturn(Optional.of(job));
             when(maintenanceJobRepository.save(job)).thenReturn(job);
-            when(maintenanceMapper.job(job)).thenReturn(stubDto(jobId));
 
             service.updateJobStatus(jobId, JobStatus.COMPLETED);
 
@@ -258,7 +259,7 @@ class MaintenanceJobServiceImplTest {
             assertThat(evt.getValue().getAction()).isEqualTo(JobAction.JOB_COMPLETED);
             assertThat(evt.getValue().getReferenceType()).isEqualTo("MAINTENANCE");
 
-            verify(cachedPageService).evictAll("maintenances");
+            verify(cachedPageService).evictAll("maintenances-jobs-v3");
         }
 
         @Test
@@ -383,7 +384,82 @@ class MaintenanceJobServiceImplTest {
         }
     }
 
+    @Nested
+    @DisplayName("staff enrichment")
+    class StaffEnrichment {
+
+        @Test
+        @DisplayName("getJobById returns full staff object when staff assigned")
+        void getJobByIdReturnsStaffObject() {
+            UUID staffId = UUID.randomUUID();
+            MaintenanceJob job = MaintenanceJob.builder()
+                    .id(jobId)
+                    .planId(planId)
+                    .houseId(houseId)
+                    .assignedStaffId(staffId)
+                    .periodStartDate(LocalDate.now())
+                    .status(JobStatus.SCHEDULED)
+                    .build();
+
+            when(maintenanceJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+            when(userClientsGrpc.getUser(staffId.toString())).thenReturn(staffResponse(staffId, "An Staff"));
+
+            MaintenanceJobDto result = service.getJobById(jobId);
+
+            assertThat(result.assignedStaffId()).isEqualTo(staffId);
+            assertThat(result.staffName()).isEqualTo("An Staff");
+            assertThat(result.staffPhone()).isEqualTo("0909000111");
+            assertThat(result.staff()).isNotNull();
+            assertThat(result.staff().email()).isEqualTo("an.staff@isums.pro");
+            assertThat(result.staff().roles()).containsExactly("TECHNICAL_STAFF");
+        }
+
+        @Test
+        @DisplayName("getAll enriches paged jobs with staff object")
+        void getAllEnrichesPagedJobs() {
+            UUID staffId = UUID.randomUUID();
+            PageRequest request = new PageRequest(1, 10, null, null, null);
+            MaintenanceJob job = MaintenanceJob.builder()
+                    .id(jobId)
+                    .planId(planId)
+                    .houseId(houseId)
+                    .assignedStaffId(staffId)
+                    .periodStartDate(LocalDate.now())
+                    .status(JobStatus.COMPLETED)
+                    .build();
+
+            org.springframework.data.domain.Page<MaintenanceJob> page =
+                    new org.springframework.data.domain.PageImpl<>(List.of(job));
+
+            doAnswer(inv -> ((Supplier<PageResponse<MaintenanceJobDto>>) inv.getArgument(3)).get())
+                    .when(cachedPageService)
+                    .getOrLoad(anyString(), any(), any(), any());
+            when(maintenanceJobRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                    .thenReturn(page);
+            when(userClientsGrpc.getUser(staffId.toString())).thenReturn(staffResponse(staffId, "Binh Staff"));
+
+            PageResponse<MaintenanceJobDto> result = service.getAll(request);
+
+            assertThat(result.items()).hasSize(1);
+            assertThat(result.items().getFirst().staffName()).isEqualTo("Binh Staff");
+            assertThat(result.items().getFirst().staff()).isNotNull();
+            assertThat(result.items().getFirst().staff().phoneNumber()).isEqualTo("0909000111");
+        }
+    }
+
     private MaintenanceJobDto stubDto(UUID id) {
-        return new MaintenanceJobDto(id, planId, houseId, null, null, null, LocalDate.now(), JobStatus.CREATED);
+        return new MaintenanceJobDto(id, planId, houseId, null, null, null, null, LocalDate.now(), JobStatus.CREATED);
+    }
+
+    private UserResponse staffResponse(UUID staffId, String name) {
+        return UserResponse.newBuilder()
+                .setId(staffId.toString())
+                .setKeycloakId("kc-" + staffId)
+                .setName(name)
+                .setEmail(name.toLowerCase().replace(" ", ".") + "@isums.pro")
+                .setPhoneNumber("0909000111")
+                .setIsEnabled(true)
+                .addRoles("TECHNICAL_STAFF")
+                .build();
     }
 }

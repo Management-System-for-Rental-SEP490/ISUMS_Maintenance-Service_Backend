@@ -2,6 +2,7 @@ package com.isums.maintainservice.services;
 
 import com.isums.maintainservice.domains.entities.MaintenanceJobHistory;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobHistoryService;
+import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,7 @@ public class MaintenanceJobHistoryServiceImpl implements MaintenanceJobHistorySe
         try{
             return maintenanceJobHistoryRepository.findByJobIdOrderByCreatedAtAsc(jobId);
         } catch (Exception ex){
-            throw new RuntimeException("Can't get job history " + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOB_HISTORY + ": " + ex.getMessage());
         }
     }
 }

@@ -174,7 +174,7 @@ class JobScheduledEventListenersTest {
         JobCreatedEvent evt = JobCreatedEvent.builder()
                 .referenceId(contractId).houseId(houseId)
                 .referenceType("INSPECTION").type("CHECK_IN").build();
-        InspectionDto created = new InspectionDto(inspId, houseId, null, null, null, null,
+        InspectionDto created = new InspectionDto(inspId, houseId, contractId, null, null, null, null,
                 InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null);
 
         when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);

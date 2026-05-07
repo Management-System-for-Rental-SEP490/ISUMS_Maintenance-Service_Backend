@@ -21,6 +21,7 @@ import com.isums.maintainservice.infrastructures.repositories.PeriodicInspection
 import com.isums.maintainservice.infrastructures.repositories.PlanHouseRepository;
 import com.isums.maintainservice.exceptions.BadRequestException;
 import com.isums.maintainservice.exceptions.NotFoundException;
+import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.userservice.grpc.UserResponse;
 import common.paginations.cache.CachedPageService;
 import common.paginations.converters.SpringPageConverter;
@@ -125,17 +126,18 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 }
             }
 
+            cachedPageService.evictAll(PAGE_NS);
             return toMaintenanceJobDtos(jobs);
 
 
         } catch (Exception ex) {
-            throw new RuntimeException("Can't generate maintenance jobs " + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GENERATE_JOBS + ": " + ex.getMessage());
         }
     }
 
     @Override
     public PageResponse<MaintenanceJobDto> getAll(PageRequest request) {
-        return cachedPageService.getOrLoad(PAGE_NS, request, new TypeReference<>() {
+        return cachedPageService.getOrLoad(PAGE_NS + ":" + common.i18n.TranslationMap.currentLanguage(), request, new TypeReference<>() {
                 },
                 () -> loadPage(request)
         );
@@ -145,12 +147,14 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     public MaintenanceJobDto getJobById(UUID jobId) {
         try{
             MaintenanceJob job = maintenanceJobRepository.findById(jobId)
-                    .orElseThrow(() -> new RuntimeException("Id not found"));
+                    .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.JOB_NOT_FOUND));
 
             return toMaintenanceJobDto(job);
 
-        }catch (Exception ex){
-            throw new RuntimeException("Can't get job" + ex.getMessage());
+        } catch (NotFoundException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOB + ": " + ex.getMessage());
         }
     }
 
@@ -160,7 +164,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByHouseIdOrderByCreatedAtDesc(houseId);
             return toMaintenanceJobDtos(jobs);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get job" + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOB + ": " + ex.getMessage());
         }
     }
 
@@ -186,7 +190,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         maintenanceJobRepository.save(job);
 
         saveHistory(job, event);
-
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     @Override
@@ -201,6 +205,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         maintenanceJobRepository.save(job);
 
         saveHistory(job, event);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     @Override
@@ -212,6 +217,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
         maintenanceJobRepository.save(job);
         saveHistory(job, event);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     @Override
@@ -226,12 +232,13 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
 
         maintenanceJobRepository.save(job);
         saveHistory(job,event);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     @Override
     public MaintenanceJobDto updateJobStatus(UUID jobId, JobStatus newStatus) {
         MaintenanceJob job = maintenanceJobRepository.findById(jobId)
-                .orElseThrow(() -> new NotFoundException("Job not found"));
+                .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.JOB_NOT_FOUND));
 
         JobStatus cur = job.getStatus();
 
@@ -240,7 +247,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         } else if (cur == JobStatus.IN_PROGRESS && newStatus == JobStatus.COMPLETED) {
             job.setStatus(JobStatus.COMPLETED);
         } else {
-            throw new BadRequestException("Invalid status transition from " + cur + " to " + newStatus);
+            throw new BadRequestException(MaintenanceMessageKeys.INVALID_STATUS_TRANSITION, cur, newStatus);
         }
 
         MaintenanceJob save = maintenanceJobRepository.save(job);
@@ -269,7 +276,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByAssignedStaffIdOrderByCreatedAtDesc(UUID.fromString(user.getId()));
             return toMaintenanceJobDtos(jobs);
         } catch (Exception ex) {
-            throw new RuntimeException("Can't get jobs for staff " + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOBS_BY_STAFF + ": " + ex.getMessage());
 
         }
     }
@@ -280,7 +287,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             List<MaintenanceJob> jobs = maintenanceJobRepository.findByPlanId(planId);
             return toMaintenanceJobDtos(jobs);
         } catch (Exception ex){
-            throw new RuntimeException("Can't get job by planId " + ex.getMessage());
+            throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOBS_BY_PLAN + ": " + ex.getMessage());
         }
     }
 
@@ -289,12 +296,12 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     public List<MaintenanceJobDto> generateByPlan(UUID planId) {
 
         PeriodicInspectionPlan plan = periodicInspectionPlanRepository.findById(planId)
-                .orElseThrow(() -> new RuntimeException("Plan not found"));
+                .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.PLAN_NOT_FOUND));
 
         List<PlanHouse> houses = planHouseRepository.findByPlanId(planId);
 
         if (houses.isEmpty()) {
-            throw new BadRequestException("Plan has no houses");
+            throw new BadRequestException(MaintenanceMessageKeys.PLAN_HAS_NO_HOUSES);
         }
 
         LocalDate periodStart = plan.getNextRunAt();
@@ -328,7 +335,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
         }
 
         if (jobs.isEmpty()) {
-            throw new BadRequestException("All houses already have jobs for this period");
+            throw new BadRequestException(MaintenanceMessageKeys.ALL_HOUSES_HAVE_JOBS);
         }
 
         maintenanceJobRepository.saveAll(jobs);
@@ -347,6 +354,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             jobEventProducer.publishJobCreated(event);
         }
 
+        cachedPageService.evictAll(PAGE_NS);
         return toMaintenanceJobDtos(jobs);
     }
 
@@ -357,7 +365,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             case MONTHLY -> plan.getNextRunAt().plusMonths(plan.getFrequencyValue());
             case QUARTERLY -> plan.getNextRunAt().plusMonths((3L * plan.getFrequencyValue()));
             case YEARLY -> plan.getNextRunAt().plusYears(plan.getFrequencyValue());
-            default -> throw new RuntimeException("Invalid frequency type");
+            default -> throw new BadRequestException(MaintenanceMessageKeys.INVALID_FREQUENCY_TYPE);
         };
     }
 

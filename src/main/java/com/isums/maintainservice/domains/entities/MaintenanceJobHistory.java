@@ -34,5 +34,9 @@ public class MaintenanceJobHistory {
     @Column(columnDefinition = "text")
     private String message;
 
+    @Column(name = "message_translations", columnDefinition = "text")
+    @Convert(converter = com.isums.common.i18n.TranslationMapConverter.class)
+    private com.isums.common.i18n.TranslationMap messageTranslations;
+
     private Instant createdAt;
 }

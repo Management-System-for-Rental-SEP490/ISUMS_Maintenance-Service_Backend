@@ -5,10 +5,13 @@ import com.isums.maintainservice.domains.dtos.MaintenanceExecution.ExecutionDto;
 import com.isums.maintainservice.domains.entities.MaintenanceExecution;
 import com.isums.maintainservice.domains.entities.MaintenanceJob;
 import com.isums.maintainservice.domains.events.AssetConditionEvent;
+import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.AssetConditionProducer;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceExecutionRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobRepository;
+import com.isums.userservice.grpc.UserResponse;
+import common.i18n.TranslationMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,6 +46,8 @@ class MaintenanceExecutionServiceImplTest {
     @Mock private MaintenanceMapper maintenanceMapper;
     @Mock private AssetConditionProducer assetConditionProducer;
     @Mock private KafkaTemplate<String, Object> kafkaTemplate;
+    @Mock private UserClientsGrpc userClientsGrpc;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks private MaintenanceExecutionServiceImpl service;
 
@@ -52,6 +59,13 @@ class MaintenanceExecutionServiceImplTest {
         houseId = UUID.randomUUID();
         assetId = UUID.randomUUID();
         staffId = UUID.randomUUID();
+        // createExecution now resolves the caller's language and fills the
+        // notes translation map. Lenient stubs so non-create tests don't
+        // trip MockitoExtension's strict stubbing.
+        lenient().when(userClientsGrpc.getUser(anyString()))
+                .thenReturn(UserResponse.newBuilder().setLanguage("vi").build());
+        lenient().when(translationAutoFillService.complete(any(), anyString()))
+                .thenReturn(new TranslationMap());
     }
 
     @Test

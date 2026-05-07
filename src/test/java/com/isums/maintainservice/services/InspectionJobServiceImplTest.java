@@ -16,6 +16,7 @@ import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
 import com.isums.maintainservice.infrastructures.repositories.InspectionJobRepository;
 import com.isums.maintainservice.infrastructures.repositories.MaintenanceJobHistoryRepository;
 import com.isums.userservice.grpc.UserResponse;
+import common.i18n.TranslationMap;
 import common.paginations.cache.CachedPageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +50,7 @@ class InspectionJobServiceImplTest {
     @Mock private MaintenanceJobHistoryRepository historyRepository;
     @Mock private UserClientsGrpc userClientsGrpc;
     @Mock private CachedPageService cachedPageService;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks private InspectionJobServiceImpl service;
 
@@ -56,6 +60,13 @@ class InspectionJobServiceImplTest {
     void setUp() {
         houseId = UUID.randomUUID();
         jobId = UUID.randomUUID();
+        // Both create() and createFromEvent() call translationAutoFillService.complete —
+        // stub it lenient so tests that don't exercise the translation path don't fail
+        // on "strict stubbing" from MockitoExtension.
+        lenient().when(translationAutoFillService.complete(anyString(), anyString()))
+                .thenReturn(new TranslationMap());
+        lenient().when(translationAutoFillService.complete(anyString()))
+                .thenReturn(new TranslationMap());
     }
 
     @Nested
@@ -67,11 +78,14 @@ class InspectionJobServiceImplTest {
         void happy() {
             CreateInspectionRequest req = new CreateInspectionRequest(houseId, InspectionType.CHECK_IN, "note");
 
+            // create() now resolves the caller's language via gRPC → stub a user.
+            when(userClientsGrpc.getUserIdAndRoleByKeyCloakId(anyString()))
+                    .thenReturn(UserResponse.newBuilder().setLanguage("vi").build());
             when(inspectionJobRepository.save(any(InspectionJob.class)))
                     .thenAnswer(inv -> { InspectionJob j = inv.getArgument(0); j.setId(jobId); return j; });
             when(mapper.toDto(any(InspectionJob.class))).thenReturn(stubDto(jobId));
 
-            InspectionDto dto = service.create(req);
+            InspectionDto dto = service.create("kc-subject", req);
 
             ArgumentCaptor<InspectionJob> cap = ArgumentCaptor.forClass(InspectionJob.class);
             verify(inspectionJobRepository).save(cap.capture());
@@ -136,8 +150,9 @@ class InspectionJobServiceImplTest {
         @DisplayName("returns DTO with staff name+phone when staff is assigned")
         void withStaff() {
             UUID staff = UUID.randomUUID();
+            UUID contractId = UUID.randomUUID();
             InspectionJob job = InspectionJob.builder()
-                    .id(jobId).houseId(houseId).assignedStaffId(staff)
+                    .id(jobId).houseId(houseId).contractId(contractId).assignedStaffId(staff)
                     .status(InspectionStatus.SCHEDULED).type(InspectionType.CHECK_IN).build();
 
             when(inspectionJobRepository.findById(jobId)).thenReturn(Optional.of(job));
@@ -147,6 +162,7 @@ class InspectionJobServiceImplTest {
 
             InspectionDto dto = service.getInspectionById(jobId);
 
+            assertThat(dto.contractId()).isEqualTo(contractId);
             assertThat(dto.staffName()).isEqualTo("Alice");
             assertThat(dto.staffPhone()).isEqualTo("0900");
         }
@@ -161,6 +177,7 @@ class InspectionJobServiceImplTest {
 
             InspectionDto dto = service.getInspectionById(jobId);
 
+            assertThat(dto.contractId()).isNull();
             assertThat(dto.staffName()).isNull();
             verify(userClientsGrpc, never()).getUser(any());
         }
@@ -248,7 +265,7 @@ class InspectionJobServiceImplTest {
             assertThatThrownBy(() ->
                     service.updateStatus(jobId, InspectionStatus.APPROVED))
                     .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("Invalid");
+                    .hasMessageContaining("invalidStatusTransition");
         }
 
         @Test
@@ -304,7 +321,7 @@ class InspectionJobServiceImplTest {
     }
 
     private InspectionDto stubDto(UUID id) {
-        return new InspectionDto(id, houseId, null, null, null, null,
+        return new InspectionDto(id, houseId, null, null, null, null, null,
                 InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null);
     }
 }

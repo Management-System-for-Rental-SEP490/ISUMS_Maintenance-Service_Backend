@@ -9,7 +9,11 @@ import common.paginations.dtos.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,8 +26,10 @@ public class InspectionController {
     private final InspectionJobService inspectionJobService;
 
     @PostMapping
-    public ApiResponse<InspectionDto> createInspection(@RequestBody CreateInspectionRequest request) {
-        InspectionDto res = inspectionJobService.create(request);
+    public ApiResponse<InspectionDto> createInspection(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody CreateInspectionRequest request) {
+        InspectionDto res = inspectionJobService.create(jwt.getSubject(), request);
         return ApiResponses.ok(res, "Create inspection successfully");
     }
 
@@ -43,5 +49,13 @@ public class InspectionController {
     public ApiResponse<InspectionDto> updateStatus(@PathVariable UUID id, @RequestBody UpdateInspectionRequest request) {
         InspectionDto res = inspectionJobService.updateStatus(id, request.status());
         return ApiResponses.ok(res, "Update inspection status successfully");
+    }
+
+    @PostMapping(value = "/{id}/house-photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<InspectionDto> uploadHousePhotos(
+            @PathVariable UUID id,
+            @RequestParam("files") List<MultipartFile> files) {
+        InspectionDto res = inspectionJobService.uploadHousePhotos(id, files);
+        return ApiResponses.ok(res, "House photos uploaded");
     }
 }
