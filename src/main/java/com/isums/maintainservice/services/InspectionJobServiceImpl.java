@@ -93,8 +93,8 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     public InspectionDto createFromEvent(JobCreatedEvent event) {
         try {
             String noteVi = event.getType().equals("CHECK_IN")
-                    ? "Pre-handover house inspection"
-                    : "End-of-contract house inspection";
+                    ? "Kiểm tra bàn giao nhà trước khi khách vào ở"
+                    : "Kiểm tra trả nhà khi kết thúc hợp đồng";
             TranslationMap noteTranslations = translationAutoFillService.complete(noteVi, DEFAULT_LANGUAGE);
 
             InspectionJob job = InspectionJob.builder()
