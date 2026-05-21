@@ -14,6 +14,7 @@ public interface MaintenanceMapper {
     @Mapping(target = "staffName", ignore = true)
     @Mapping(target = "staffPhone", ignore = true)
     @Mapping(target = "staff", ignore = true)
+    @Mapping(target = "quote", ignore = true)
     MaintenanceJobDto job(MaintenanceJob job);
     List<MaintenanceJobDto> jobs(List<MaintenanceJob> jobs);
 

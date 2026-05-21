@@ -21,6 +21,7 @@ public abstract class InspectionMapper {
     @Mapping(target = "staffPhone", ignore = true)
     @Mapping(target = "note", expression = "java(resolveNote(job))")
     @Mapping(target = "housePhotoUrls", expression = "java(resolveHousePhotoUrls(job))")
+    @Mapping(target = "quote", ignore = true)
     public abstract InspectionDto toDto(InspectionJob job);
 
     public abstract List<InspectionDto> toDtos(List<InspectionJob> jobs);
