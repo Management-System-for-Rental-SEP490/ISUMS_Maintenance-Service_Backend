@@ -11,6 +11,8 @@ import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.domains.events.SlotEvent;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
+import com.isums.maintainservice.domains.dtos.IssueQuoteDto;
+import com.isums.maintainservice.infrastructures.gRpc.QuoteClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.kafka.SlotProducer;
@@ -48,6 +50,7 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
     private final MaintenanceJobRepository maintenanceJobRepository;
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
+    private final QuoteClientsGrpc quoteClientsGrpc;
     private final JobEventProducer jobEventProducer;
     private final CachedPageService cachedPageService;
 
@@ -149,13 +152,23 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
             MaintenanceJob job = maintenanceJobRepository.findById(jobId)
                     .orElseThrow(() -> new NotFoundException(MaintenanceMessageKeys.JOB_NOT_FOUND));
 
-            return toMaintenanceJobDto(job);
+            MaintenanceJobDto base = toMaintenanceJobDto(job);
+            IssueQuoteDto quote = QuoteAdapter.toDto(
+                    quoteClientsGrpc.getLatestByReference(job.getId(), "MAINTENANCE_JOB"));
+            return withQuote(base, quote);
 
         } catch (NotFoundException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new RuntimeException(MaintenanceMessageKeys.CANNOT_GET_JOB + ": " + ex.getMessage());
         }
+    }
+
+    private MaintenanceJobDto withQuote(MaintenanceJobDto dto, IssueQuoteDto quote) {
+        return new MaintenanceJobDto(
+                dto.id(), dto.planId(), dto.houseId(), dto.assignedStaffId(),
+                dto.staffName(), dto.staffPhone(), dto.staff(),
+                dto.periodStartDate(), dto.status(), quote);
     }
 
     @Override
@@ -419,7 +432,8 @@ public class MaintenanceJobServiceImpl implements MaintenanceJobService {
                 staff != null ? staff.phoneNumber() : null,
                 staff,
                 job.getPeriodStartDate(),
-                job.getStatus()
+                job.getStatus(),
+                null
         );
     }
 

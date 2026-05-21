@@ -20,6 +20,7 @@ public record InspectionDto(
         String note,
         List<String> housePhotoUrls,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        IssueQuoteDto quote
 ) {
 }

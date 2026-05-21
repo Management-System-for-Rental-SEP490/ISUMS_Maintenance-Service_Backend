@@ -14,6 +14,8 @@ import com.isums.maintainservice.exceptions.BadRequestException;
 import com.isums.maintainservice.exceptions.NotFoundException;
 import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
+import com.isums.maintainservice.domains.dtos.IssueQuoteDto;
+import com.isums.maintainservice.infrastructures.gRpc.QuoteClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
@@ -50,6 +52,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     private final JobEventProducer jobEventProducer;
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
+    private final QuoteClientsGrpc quoteClientsGrpc;
     private final CachedPageService cachedPageService;
     private final TranslationAutoFillService translationAutoFillService;
     private final S3ServiceImpl s3Service;
@@ -145,6 +148,8 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                 staffName = user.getName();
                 staffPhone = user.getPhoneNumber();
             }
+            IssueQuoteDto quote = QuoteAdapter.toDto(
+                    quoteClientsGrpc.getLatestByReference(job.getId(), "INSPECTION"));
             return new InspectionDto(
                     job.getId(),
                     job.getHouseId(),
@@ -158,7 +163,8 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                     resolveNote(job),
                     resolveHousePhotoUrls(job),
                     job.getCreatedAt(),
-                    job.getUpdatedAt()
+                    job.getUpdatedAt(),
+                    quote
             );
         } catch (NotFoundException ex) {
             throw ex;
