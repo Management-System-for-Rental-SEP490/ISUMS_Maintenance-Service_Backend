@@ -68,7 +68,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-tracing-bridge-otel'
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'com.isums:isums-observability-common:1.0-SNAPSHOT'
+    implementation 'com.isums:isums-observability-common:1.1.0'
     implementation "org.mapstruct:mapstruct:1.6.3"
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
     annotationProcessor "org.mapstruct:mapstruct-processor:1.6.3"
