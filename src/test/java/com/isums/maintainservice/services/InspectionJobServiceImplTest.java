@@ -322,6 +322,6 @@ class InspectionJobServiceImplTest {
 
     private InspectionDto stubDto(UUID id) {
         return new InspectionDto(id, houseId, null, null, null, null, null,
-                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null);
+                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null, null, null);
     }
 }

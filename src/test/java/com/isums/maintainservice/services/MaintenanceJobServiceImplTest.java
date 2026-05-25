@@ -448,7 +448,7 @@ class MaintenanceJobServiceImplTest {
     }
 
     private MaintenanceJobDto stubDto(UUID id) {
-        return new MaintenanceJobDto(id, planId, houseId, null, null, null, null, LocalDate.now(), JobStatus.CREATED);
+        return new MaintenanceJobDto(id, planId, houseId, null, null, null, null, null, LocalDate.now(), JobStatus.CREATED, null);
     }
 
     private UserResponse staffResponse(UUID staffId, String name) {

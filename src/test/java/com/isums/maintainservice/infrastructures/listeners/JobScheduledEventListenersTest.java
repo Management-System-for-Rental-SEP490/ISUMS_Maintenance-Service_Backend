@@ -1,6 +1,6 @@
 package com.isums.maintainservice.infrastructures.listeners;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isums.maintainservice.domains.dtos.InspectionDto;
 import com.isums.maintainservice.domains.enums.InspectionStatus;
@@ -10,7 +10,7 @@ import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.infrastructures.abstracts.MaintenanceJobService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
+import common.kafkas.IdempotencyService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,7 +18,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.Acknowledgment;
 
 import java.util.UUID;
 
@@ -26,8 +25,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,28 +39,22 @@ class JobScheduledEventListenersTest {
     @Mock private InspectionJobService inspectionJobService;
     @Mock private ObjectMapper objectMapper;
     @Mock private KafkaTemplate<String, Object> kafka;
-    @Mock private Acknowledgment ack;
+    @Mock private IdempotencyService idempotencyService;
 
     @InjectMocks private JobScheduledEventListeners listener;
 
-    private ConsumerRecord<String, String> record(String payload) {
-        return new ConsumerRecord<>("t", 0, 0L, "k", payload);
-    }
-
     @Test
-    @DisplayName("handleScheduled routes MAINTENANCE to maintenanceJobService and acks")
+    @DisplayName("handleScheduled routes MAINTENANCE to maintenanceJobService")
     void maintenanceScheduled() throws Exception {
         JobEvent evt = JobEvent.builder()
                 .referenceId(UUID.randomUUID())
                 .referenceType("MAINTENANCE").action(JobAction.JOB_SCHEDULED).build();
-
         when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
 
-        listener.handleScheduled(record("{}"), ack);
+        listener.handleScheduled("{}");
 
         verify(maintenanceJobService).markScheduled(evt);
         verify(inspectionJobService, never()).markScheduled(any());
-        verify(ack).acknowledge();
     }
 
     @Test
@@ -70,133 +65,157 @@ class JobScheduledEventListenersTest {
                 .referenceType("INSPECTION").action(JobAction.JOB_SCHEDULED).build();
         when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
 
-        listener.handleScheduled(record("{}"), ack);
+        listener.handleScheduled("{}");
 
         verify(inspectionJobService).markScheduled(evt);
         verify(maintenanceJobService, never()).markScheduled(any());
     }
 
     @Test
-    @DisplayName("handleScheduled skips unsupported reference type and still acks")
-    void unsupported() throws Exception {
-        JobEvent evt = JobEvent.builder()
-                .referenceType("ISSUE").action(JobAction.JOB_SCHEDULED).build();
-        when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
-
-        listener.handleScheduled(record("{}"), ack);
-
-        verify(maintenanceJobService, never()).markScheduled(any());
-        verify(ack).acknowledge();
+    @DisplayName("handleScheduled swallows null payload (no work)")
+    void scheduledNullPayload() {
+        listener.handleScheduled(null);
+        verifyNoInteractions(maintenanceJobService, inspectionJobService);
     }
 
     @Test
-    @DisplayName("handleScheduled acks poison-pill payload")
-    void poison() throws Exception {
+    @DisplayName("handleScheduled swallows JSON parse error (no retry, poison-pill)")
+    void scheduledBadJson() throws Exception {
         when(objectMapper.readValue(anyString(), eq(JobEvent.class)))
-                .thenThrow(new JsonProcessingException("bad") {});
+                .thenThrow(new JsonParseException(null, "bad"));
 
-        listener.handleScheduled(record("bad"), ack);
+        listener.handleScheduled("{}");
 
-        verify(ack).acknowledge();
+        verifyNoInteractions(maintenanceJobService, inspectionJobService);
     }
 
     @Test
-    @DisplayName("handleScheduled rethrows unexpected errors so Kafka retries")
-    void rethrowsUnexpected() throws Exception {
+    @DisplayName("handleScheduled rethrows on downstream failure (Kafka retries)")
+    void scheduledRetries() throws Exception {
         JobEvent evt = JobEvent.builder()
-                .referenceType("MAINTENANCE").action(JobAction.JOB_SCHEDULED).build();
+                .referenceType("INSPECTION").action(JobAction.JOB_SCHEDULED).build();
         when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
-        org.mockito.Mockito.doThrow(new RuntimeException("boom"))
-                .when(maintenanceJobService).markScheduled(evt);
+        doThrow(new RuntimeException("db down")).when(inspectionJobService).markScheduled(evt);
 
-        assertThatThrownBy(() -> listener.handleScheduled(record("{}"), ack))
+        assertThatThrownBy(() -> listener.handleScheduled("{}"))
                 .isInstanceOf(RuntimeException.class);
-        verify(ack, never()).acknowledge();
     }
 
     @Test
-    @DisplayName("handleRescheduled delegates to maintenance.markRescheduled when type=MAINTENANCE")
-    void rescheduled() throws Exception {
+    @DisplayName("handleScheduled ignores events whose action != JOB_SCHEDULED")
+    void scheduledWrongAction() throws Exception {
         JobEvent evt = JobEvent.builder()
-                .referenceType("MAINTENANCE").action(JobAction.JOB_RESCHEDULED).build();
+                .referenceType("INSPECTION").action(JobAction.JOB_CREATED).build();
         when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
 
-        listener.handleRescheduled(record("{}"), ack);
+        listener.handleScheduled("{}");
 
-        verify(maintenanceJobService).markRescheduled(evt);
-        verify(ack).acknowledge();
+        verify(inspectionJobService, never()).markScheduled(any());
     }
 
     @Test
-    @DisplayName("handleNeedReschedule delegates on matching type/action")
-    void needReschedule() throws Exception {
+    @DisplayName("handleAssigned routes INSPECTION to inspectionJobService.markSlot")
+    void assignedInspection() throws Exception {
         JobEvent evt = JobEvent.builder()
-                .referenceType("MAINTENANCE").action(JobAction.JOB_NEED_RESCHEDULE).build();
-        when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
-
-        listener.handleNeedReschedule(record("{}"), ack);
-
-        verify(maintenanceJobService).markNeedReschedule(evt);
-    }
-
-    @Test
-    @DisplayName("handleAssigned delegates to markSlot when type=MAINTENANCE")
-    void assigned() throws Exception {
-        JobEvent evt = JobEvent.builder()
-                .referenceType("MAINTENANCE").action(JobAction.JOB_ASSIGNED).build();
-        when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
-
-        listener.handleAssigned(record("{}"), ack);
-
-        verify(maintenanceJobService).markSlot(evt);
-    }
-
-    @Test
-    @DisplayName("handleAssigned skips non-MAINTENANCE events")
-    void assignedWrongType() throws Exception {
-        JobEvent evt = JobEvent.builder()
+                .referenceId(UUID.randomUUID())
+                .slotId(UUID.randomUUID())
                 .referenceType("INSPECTION").action(JobAction.JOB_ASSIGNED).build();
         when(objectMapper.readValue(anyString(), eq(JobEvent.class))).thenReturn(evt);
 
-        listener.handleAssigned(record("{}"), ack);
+        listener.handleAssigned("{}");
 
+        verify(inspectionJobService).markSlot(evt);
         verify(maintenanceJobService, never()).markSlot(any());
-        verify(ack).acknowledge();
     }
 
     @Test
-    @DisplayName("handleJobCreated creates inspection and re-publishes to job.inspection.created")
-    void jobCreatedInspection() throws Exception {
-        UUID inspId = UUID.randomUUID();
-        UUID contractId = UUID.randomUUID();
-        UUID houseId = UUID.randomUUID();
-
-        JobCreatedEvent evt = JobCreatedEvent.builder()
-                .referenceId(contractId).houseId(houseId)
-                .referenceType("INSPECTION").type("CHECK_IN").build();
-        InspectionDto created = new InspectionDto(inspId, houseId, contractId, null, null, null, null,
-                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null);
-
-        when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);
-        when(inspectionJobService.createFromEvent(evt)).thenReturn(created);
-
-        listener.handleJobCreated(record("{}"), ack);
-
-        verify(inspectionJobService).createFromEvent(evt);
-        verify(kafka).send(eq("job.inspection.created"), eq(inspId.toString()), any(JobCreatedEvent.class));
-        verify(ack).acknowledge();
+    @DisplayName("handleJobCreated swallows null payload")
+    void jobCreatedNullPayload() {
+        listener.handleJobCreated(null);
+        verifyNoInteractions(maintenanceJobService, inspectionJobService);
     }
 
     @Test
-    @DisplayName("handleJobCreated skips non-INSPECTION events but still acks")
+    @DisplayName("handleJobCreated skips non-INSPECTION referenceType")
     void jobCreatedNonInspection() throws Exception {
         JobCreatedEvent evt = JobCreatedEvent.builder()
-                .referenceType("MAINTENANCE").build();
+                .referenceId(UUID.randomUUID())
+                .houseId(UUID.randomUUID())
+                .referenceType("MAINTENANCE")
+                .type("CHECK_IN")
+                .messageId(UUID.randomUUID().toString())
+                .build();
         when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);
 
-        listener.handleJobCreated(record("{}"), ack);
+        listener.handleJobCreated("{}");
+
+        verifyNoInteractions(inspectionJobService);
+    }
+
+    @Test
+    @DisplayName("handleJobCreated creates inspection then publishes job.inspection.created")
+    void jobCreatedHappyPath() throws Exception {
+        UUID contractId = UUID.randomUUID();
+        UUID houseId = UUID.randomUUID();
+        UUID inspectionId = UUID.randomUUID();
+        String messageId = UUID.randomUUID().toString();
+
+        JobCreatedEvent evt = JobCreatedEvent.builder()
+                .referenceId(contractId)
+                .houseId(houseId)
+                .referenceType("INSPECTION")
+                .type("CHECK_IN")
+                .messageId(messageId)
+                .build();
+        when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);
+        when(idempotencyService.isDuplicate(messageId)).thenReturn(false);
+
+        InspectionDto created = new InspectionDto(
+                inspectionId, houseId, contractId, null, null, null, null,
+                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null, null, null);
+        when(inspectionJobService.createFromEvent(evt)).thenReturn(created);
+
+        listener.handleJobCreated("{}");
+
+        verify(inspectionJobService).createFromEvent(evt);
+        verify(idempotencyService).markProcessed(messageId);
+        verify(kafka).send(eq("job.inspection.created"), eq(inspectionId.toString()), any());
+    }
+
+    @Test
+    @DisplayName("handleJobCreated dedupes by messageId — duplicate skipped, no createFromEvent")
+    void jobCreatedDeduped() throws Exception {
+        String messageId = UUID.randomUUID().toString();
+        JobCreatedEvent evt = JobCreatedEvent.builder()
+                .referenceId(UUID.randomUUID())
+                .houseId(UUID.randomUUID())
+                .referenceType("INSPECTION")
+                .type("CHECK_IN")
+                .messageId(messageId)
+                .build();
+        when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);
+        when(idempotencyService.isDuplicate(messageId)).thenReturn(true);
+
+        listener.handleJobCreated("{}");
 
         verify(inspectionJobService, never()).createFromEvent(any());
-        verify(ack).acknowledge();
+    }
+
+    @Test
+    @DisplayName("handleJobCreated missing required field (houseId) — routes to DLQ instead of crashing")
+    void jobCreatedMissingHouseId() throws Exception {
+        JobCreatedEvent evt = JobCreatedEvent.builder()
+                .referenceId(UUID.randomUUID())
+                .houseId(null)
+                .referenceType("INSPECTION")
+                .type("CHECK_IN")
+                .messageId(UUID.randomUUID().toString())
+                .build();
+        when(objectMapper.readValue(anyString(), eq(JobCreatedEvent.class))).thenReturn(evt);
+
+        listener.handleJobCreated("{}");
+
+        verify(inspectionJobService, never()).createFromEvent(any());
+        verify(kafka).send(eq("job.created-dlq"), eq("MISSING_REQUIRED_FIELDS"), anyString());
     }
 }
