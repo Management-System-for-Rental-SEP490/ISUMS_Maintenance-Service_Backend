@@ -4,14 +4,12 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isums.maintainservice.domains.events.RelocationReportedEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.support.Acknowledgment;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -31,12 +29,8 @@ class RelocationEventListenerTest {
 
     @Mock private InspectionJobService inspectionJobService;
     @Mock private ObjectMapper objectMapper;
-    @Mock private Acknowledgment ack;
 
     @InjectMocks private RelocationEventListener listener;
-
-    private final ConsumerRecord<String, String> rec =
-            new ConsumerRecord<>("relocation.reported", 0, 0L, "k", "v");
 
     private RelocationReportedEvent event(UUID oldContractId) {
         return RelocationReportedEvent.builder()
@@ -51,39 +45,43 @@ class RelocationEventListenerTest {
     }
 
     @Test
-    @DisplayName("happy path: marks the old contract inspection as PENDING_MANAGER_REVIEW + acks")
+    @DisplayName("happy path: marks the old contract inspection as PENDING_MANAGER_REVIEW")
     void happyPath() throws Exception {
         UUID oldContractId = UUID.randomUUID();
         when(objectMapper.readValue("v", RelocationReportedEvent.class)).thenReturn(event(oldContractId));
 
-        listener.handleRelocationReported(rec, ack);
+        listener.handleRelocationReported("v");
 
         verify(inspectionJobService).markPendingManagerReview(oldContractId);
-        verify(ack).acknowledge();
     }
 
     @Test
-    @DisplayName("skips + acks when oldContractId is null (malformed event from upstream)")
+    @DisplayName("skips when oldContractId is null (malformed event)")
     void missingOldContractIdSkips() throws Exception {
         when(objectMapper.readValue("v", RelocationReportedEvent.class))
                 .thenReturn(event(null));
 
-        listener.handleRelocationReported(rec, ack);
+        listener.handleRelocationReported("v");
 
         verify(inspectionJobService, never()).markPendingManagerReview(any());
-        verify(ack).acknowledge();
     }
 
     @Test
-    @DisplayName("acks on JSON parse failure (poison-pill — no retry, no DLQ)")
+    @DisplayName("swallows null payload (no work, no NPE)")
+    void nullPayload() {
+        listener.handleRelocationReported(null);
+        verifyNoInteractions(inspectionJobService);
+    }
+
+    @Test
+    @DisplayName("swallows JSON parse failure (poison-pill — no retry)")
     void jsonFailureSkips() throws Exception {
         when(objectMapper.readValue(any(String.class), eq(RelocationReportedEvent.class)))
                 .thenThrow(new JsonParseException(null, "bad"));
 
-        listener.handleRelocationReported(rec, ack);
+        listener.handleRelocationReported("v");
 
         verifyNoInteractions(inspectionJobService);
-        verify(ack).acknowledge();
     }
 
     @Test
@@ -93,14 +91,12 @@ class RelocationEventListenerTest {
         when(objectMapper.readValue("v", RelocationReportedEvent.class)).thenReturn(event(oldContractId));
         doThrow(new RuntimeException("db down")).when(inspectionJobService).markPendingManagerReview(oldContractId);
 
-        assertThatThrownBy(() -> listener.handleRelocationReported(rec, ack))
+        assertThatThrownBy(() -> listener.handleRelocationReported("v"))
                 .isInstanceOf(RuntimeException.class);
-
-        verify(ack, never()).acknowledge();
     }
 
     @Test
-    @DisplayName("acks even when reportReason is blank — relocation should still flow")
+    @DisplayName("proceeds when reportReason is blank — relocation should still flow")
     void blankReasonStillProcesses() throws Exception {
         UUID oldContractId = UUID.randomUUID();
         RelocationReportedEvent evt = RelocationReportedEvent.builder()
@@ -113,22 +109,20 @@ class RelocationEventListenerTest {
                 .build();
         when(objectMapper.readValue("v", RelocationReportedEvent.class)).thenReturn(evt);
 
-        listener.handleRelocationReported(rec, ack);
+        listener.handleRelocationReported("v");
 
         verify(inspectionJobService).markPendingManagerReview(oldContractId);
-        verify(ack).acknowledge();
     }
 
     @Test
-    @DisplayName("idempotent-by-contract: handler doesn't fail when called for the same contract twice (downstream guards)")
-    void replayIsAcked() throws Exception {
+    @DisplayName("replay invokes downstream twice (idempotency is downstream's job)")
+    void replayInvokesTwice() throws Exception {
         UUID oldContractId = UUID.randomUUID();
         when(objectMapper.readValue("v", RelocationReportedEvent.class)).thenReturn(event(oldContractId));
 
-        listener.handleRelocationReported(rec, ack);
-        listener.handleRelocationReported(rec, ack);
+        listener.handleRelocationReported("v");
+        listener.handleRelocationReported("v");
 
         verify(inspectionJobService, org.mockito.Mockito.times(2)).markPendingManagerReview(oldContractId);
-        verify(ack, org.mockito.Mockito.times(2)).acknowledge();
     }
 }
