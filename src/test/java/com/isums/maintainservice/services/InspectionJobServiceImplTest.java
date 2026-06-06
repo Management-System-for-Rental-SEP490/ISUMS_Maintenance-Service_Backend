@@ -10,6 +10,7 @@ import com.isums.maintainservice.domains.events.JobCreatedEvent;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.exceptions.BadRequestException;
 import com.isums.maintainservice.exceptions.NotFoundException;
+import com.isums.maintainservice.infrastructures.gRpc.QuoteClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
@@ -34,7 +35,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,6 +52,7 @@ class InspectionJobServiceImplTest {
     @Mock private JobEventProducer jobEventProducer;
     @Mock private MaintenanceJobHistoryRepository historyRepository;
     @Mock private UserClientsGrpc userClientsGrpc;
+    @Mock private QuoteClientsGrpc quoteClientsGrpc;
     @Mock private CachedPageService cachedPageService;
     @Mock private TranslationAutoFillService translationAutoFillService;
 
@@ -118,7 +122,7 @@ class InspectionJobServiceImplTest {
             verify(inspectionJobRepository).save(cap.capture());
             assertThat(cap.getValue().getType()).isEqualTo(InspectionType.CHECK_IN);
             assertThat(cap.getValue().getContractId()).isEqualTo(contractId);
-            assertThat(cap.getValue().getNote()).contains("trước khi bàn giao");
+            assertThat(cap.getValue().getNote()).contains("bàn giao nhà trước khi khách vào ở");
             assertThat(cap.getValue().getStatus()).isEqualTo(InspectionStatus.CREATED);
         }
 
@@ -320,8 +324,76 @@ class InspectionJobServiceImplTest {
         }
     }
 
+    @Nested
+    @DisplayName("relocation review")
+    class RelocationReview {
+
+        @Test
+        @DisplayName("staff report moves DONE inspection to PENDING_MANAGER_REVIEW")
+        void pendingManagerReview() {
+            UUID contractId = UUID.randomUUID();
+            InspectionJob job = InspectionJob.builder()
+                    .id(jobId)
+                    .contractId(contractId)
+                    .status(InspectionStatus.DONE)
+                    .build();
+            when(inspectionJobRepository
+                    .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(
+                            eq(contractId), anyList()))
+                    .thenReturn(Optional.of(job));
+
+            service.markPendingManagerReview(contractId);
+
+            assertThat(job.getStatus()).isEqualTo(InspectionStatus.PENDING_MANAGER_REVIEW);
+            verify(inspectionJobRepository).save(job);
+            verify(cachedPageService).evictAll("inspections");
+        }
+
+        @Test
+        @DisplayName("manager approval moves inspection to APPROVED")
+        void managerApproves() {
+            UUID contractId = UUID.randomUUID();
+            InspectionJob job = InspectionJob.builder()
+                    .id(jobId)
+                    .contractId(contractId)
+                    .status(InspectionStatus.PENDING_MANAGER_REVIEW)
+                    .build();
+            when(inspectionJobRepository
+                    .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(
+                            eq(contractId), anyList()))
+                    .thenReturn(Optional.of(job));
+
+            service.markManagerReviewed(contractId, true);
+
+            assertThat(job.getStatus()).isEqualTo(InspectionStatus.APPROVED);
+            verify(inspectionJobRepository).save(job);
+            verify(cachedPageService).evictAll("inspections");
+        }
+
+        @Test
+        @DisplayName("manager rejection moves inspection back to DONE")
+        void managerRejects() {
+            UUID contractId = UUID.randomUUID();
+            InspectionJob job = InspectionJob.builder()
+                    .id(jobId)
+                    .contractId(contractId)
+                    .status(InspectionStatus.PENDING_MANAGER_REVIEW)
+                    .build();
+            when(inspectionJobRepository
+                    .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(
+                            eq(contractId), anyList()))
+                    .thenReturn(Optional.of(job));
+
+            service.markManagerReviewed(contractId, false);
+
+            assertThat(job.getStatus()).isEqualTo(InspectionStatus.DONE);
+            verify(inspectionJobRepository).save(job);
+        }
+    }
+
     private InspectionDto stubDto(UUID id) {
         return new InspectionDto(id, houseId, null, null, null, null, null,
-                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x", null, null);
+                InspectionStatus.CREATED, InspectionType.CHECK_IN, "x",
+                null, null, null, null);
     }
 }

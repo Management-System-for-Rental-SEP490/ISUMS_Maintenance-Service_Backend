@@ -336,23 +336,58 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                 InspectionStatus.CREATED,
                 InspectionStatus.SCHEDULED,
                 InspectionStatus.IN_PROGRESS,
-                InspectionStatus.PENDING_MANAGER_REVIEW
+                InspectionStatus.PENDING_MANAGER_REVIEW,
+                InspectionStatus.DONE
         );
         InspectionJob job = inspectionJobRepository
                 .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(contractId, openStatuses)
                 .orElse(null);
         if (job == null) {
-            log.warn("[Inspection] No open inspection job for contractId={}, skip done transition",
+            log.warn("[Inspection] No inspection job awaiting manager review for contractId={}",
                     contractId);
             return;
         }
         InspectionStatus prev = job.getStatus();
-        job.setStatus(InspectionStatus.DONE);
+        if (prev == InspectionStatus.PENDING_MANAGER_REVIEW) {
+            return;
+        }
+        job.setStatus(InspectionStatus.PENDING_MANAGER_REVIEW);
         job.setUpdatedAt(java.time.Instant.now());
         inspectionJobRepository.save(job);
         cachedPageService.evictAll(PAGE_NS);
-        log.info("[Inspection] markDoneAfterRelocationReport jobId={} contractId={} prev={}",
+        log.info("[Inspection] pendingManagerReview jobId={} contractId={} prev={}",
                 job.getId(), contractId, prev);
+    }
+
+    @Override
+    public void markManagerReviewed(UUID contractId, boolean approved) {
+        if (contractId == null) {
+            log.warn("[Inspection] markManagerReviewed called with null contractId");
+            return;
+        }
+        java.util.List<InspectionStatus> reviewStatuses = java.util.List.of(
+                InspectionStatus.PENDING_MANAGER_REVIEW,
+                InspectionStatus.DONE,
+                InspectionStatus.APPROVED
+        );
+        InspectionJob job = inspectionJobRepository
+                .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(contractId, reviewStatuses)
+                .orElse(null);
+        if (job == null) {
+            log.warn("[Inspection] No reviewed inspection job for contractId={}", contractId);
+            return;
+        }
+        InspectionStatus target = approved ? InspectionStatus.APPROVED : InspectionStatus.DONE;
+        InspectionStatus prev = job.getStatus();
+        if (prev == target) {
+            return;
+        }
+        job.setStatus(target);
+        job.setUpdatedAt(java.time.Instant.now());
+        inspectionJobRepository.save(job);
+        cachedPageService.evictAll(PAGE_NS);
+        log.info("[Inspection] managerReviewed jobId={} contractId={} approved={} prev={} next={}",
+                job.getId(), contractId, approved, prev, target);
     }
 
     private void saveHistory(InspectionJob job, JobEvent event) {

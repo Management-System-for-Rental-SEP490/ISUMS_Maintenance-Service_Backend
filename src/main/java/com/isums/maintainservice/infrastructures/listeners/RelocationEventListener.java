@@ -1,13 +1,13 @@
 package com.isums.maintainservice.infrastructures.listeners;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isums.maintainservice.domains.events.RelocationReportedEvent;
+import com.isums.maintainservice.domains.events.RelocationReviewedEvent;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,26 +19,57 @@ public class RelocationEventListener {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "relocation.reported", groupId = "maintenance-group")
-    public void handleRelocationReported(ConsumerRecord<String, String> record, Acknowledgment ack) {
+    public void handleRelocationReported(String payload) {
+        RelocationReportedEvent event = read(payload, RelocationReportedEvent.class, "relocation.reported");
+        if (event == null) {
+            return;
+        }
+        if (event.getOldContractId() == null) {
+            log.warn("[Maintenance] relocation.reported missing oldContractId, skip");
+            return;
+        }
         try {
-            RelocationReportedEvent event = objectMapper.readValue(record.value(), RelocationReportedEvent.class);
-            if (event.getOldContractId() == null) {
-                log.warn("[Maintenance] relocation.reported missing oldContractId, skip");
-                ack.acknowledge();
-                return;
-            }
             inspectionJobService.markPendingManagerReview(event.getOldContractId());
-            ack.acknowledge();
             log.info("[Maintenance] relocation.reported handled relocationId={} contractId={}",
                     event.getRelocationRequestId(), event.getOldContractId());
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            log.error("[Maintenance] relocation.reported deserialize failed raw={}: {}",
-                    record.value(), e.getMessage());
-            ack.acknowledge();
         } catch (Exception e) {
-            log.error("[Maintenance] relocation.reported processing failed, will retry: {}",
-                    e.getMessage(), e);
+            log.error("[Maintenance] relocation.reported processing failed contractId={}: {}",
+                    event.getOldContractId(), e.getMessage(), e);
             throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "relocation.reviewed", groupId = "maintenance-relocation-review")
+    public void handleRelocationReviewed(String payload) {
+        RelocationReviewedEvent event = read(payload, RelocationReviewedEvent.class, "relocation.reviewed");
+        if (event == null) {
+            return;
+        }
+        if (event.getOldContractId() == null) {
+            log.warn("[Maintenance] relocation.reviewed missing oldContractId, skip");
+            return;
+        }
+        try {
+            inspectionJobService.markManagerReviewed(event.getOldContractId(), event.isApproved());
+            log.info("[Maintenance] relocation.reviewed handled relocationId={} contractId={} approved={}",
+                    event.getRelocationRequestId(), event.getOldContractId(), event.isApproved());
+        } catch (Exception e) {
+            log.error("[Maintenance] relocation.reviewed processing failed contractId={}: {}",
+                    event.getOldContractId(), e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    private <T> T read(String payload, Class<T> eventType, String topic) {
+        if (payload == null || payload.isBlank()) {
+            log.error("[Maintenance] {} empty payload, skipping", topic);
+            return null;
+        }
+        try {
+            return objectMapper.readValue(payload, eventType);
+        } catch (JacksonException e) {
+            log.error("[Maintenance] {} deserialize failed raw={}: {}", topic, payload, e.getMessage());
+            return null;
         }
     }
 }

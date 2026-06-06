@@ -24,4 +24,6 @@ public interface InspectionJobService {
     void markScheduled(JobEvent event);
     void markSlot(JobEvent event);
     void markPendingManagerReview(UUID contractId);
+
+    void markManagerReviewed(UUID contractId, boolean approved);
 }

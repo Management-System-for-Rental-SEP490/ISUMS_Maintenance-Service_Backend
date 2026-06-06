@@ -10,6 +10,7 @@ import com.isums.maintainservice.domains.enums.JobStatus;
 import com.isums.maintainservice.domains.events.JobEvent;
 import com.isums.maintainservice.exceptions.BadRequestException;
 import com.isums.maintainservice.exceptions.NotFoundException;
+import com.isums.maintainservice.infrastructures.gRpc.QuoteClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.MaintenanceMapper;
@@ -58,6 +59,7 @@ class MaintenanceJobServiceImplTest {
     @Mock private MaintenanceJobRepository maintenanceJobRepository;
     @Mock private MaintenanceJobHistoryRepository historyRepository;
     @Mock private UserClientsGrpc userClientsGrpc;
+    @Mock private QuoteClientsGrpc quoteClientsGrpc;
     @Mock private JobEventProducer jobEventProducer;
     @Mock private CachedPageService cachedPageService;
 
@@ -448,7 +450,9 @@ class MaintenanceJobServiceImplTest {
     }
 
     private MaintenanceJobDto stubDto(UUID id) {
-        return new MaintenanceJobDto(id, planId, houseId, null, null, null, null, LocalDate.now(), JobStatus.CREATED);
+        return new MaintenanceJobDto(
+                id, planId, houseId, null, null, null, null,
+                LocalDate.now(), JobStatus.CREATED, null);
     }
 
     private UserResponse staffResponse(UUID staffId, String name) {
