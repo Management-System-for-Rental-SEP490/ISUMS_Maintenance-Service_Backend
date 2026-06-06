@@ -238,13 +238,15 @@ public class InspectionJobServiceImpl implements InspectionJobService {
 
         InspectionJob saved = inspectionJobRepository.save(job);
 
-        if (newStatus == InspectionStatus.DONE) {
+        if (newStatus == InspectionStatus.APPROVED) {
             JobEvent event = JobEvent.builder()
                     .referenceId(job.getId())
                     .slotId(job.getSlotId())
                     .staffId(job.getAssignedStaffId())
+                    .houseId(job.getHouseId())
                     .referenceType("INSPECTION")
                     .contractId(job.getContractId())
+                    .inspectionType(job.getType() != null ? job.getType().name() : null)
                     .action(JobAction.JOB_COMPLETED)
                     .build();
 

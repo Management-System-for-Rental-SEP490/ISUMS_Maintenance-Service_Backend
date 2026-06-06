@@ -217,7 +217,7 @@ class InspectionJobServiceImplTest {
         }
 
         @Test
-        @DisplayName("IN_PROGRESS -> DONE publishes JOB_COMPLETED and evicts cache")
+        @DisplayName("IN_PROGRESS -> DONE waits for manager approval")
         void inProgressToDone() {
             UUID slot = UUID.randomUUID(), staff = UUID.randomUUID();
             InspectionJob job = InspectionJob.builder()
@@ -232,21 +232,21 @@ class InspectionJobServiceImplTest {
 
             assertThat(job.getStatus()).isEqualTo(InspectionStatus.DONE);
 
-            ArgumentCaptor<JobEvent> evt = ArgumentCaptor.forClass(JobEvent.class);
-            verify(jobEventProducer).publishJobCompleted(evt.capture());
-            assertThat(evt.getValue().getAction()).isEqualTo(JobAction.JOB_COMPLETED);
-            assertThat(evt.getValue().getReferenceType()).isEqualTo("INSPECTION");
-            assertThat(evt.getValue().getSlotId()).isEqualTo(slot);
-            assertThat(evt.getValue().getStaffId()).isEqualTo(staff);
+            verify(jobEventProducer, never()).publishJobCompleted(any());
 
             verify(cachedPageService).evictAll("inspections");
         }
 
         @Test
-        @DisplayName("DONE -> APPROVED transitions without publishing event")
+        @DisplayName("DONE -> APPROVED publishes completed inspection details")
         void doneToApproved() {
+            UUID contractId = UUID.randomUUID();
             InspectionJob job = InspectionJob.builder()
-                    .id(jobId).status(InspectionStatus.DONE).build();
+                    .id(jobId)
+                    .status(InspectionStatus.DONE)
+                    .contractId(contractId)
+                    .type(com.isums.maintainservice.domains.enums.InspectionType.CHECK_OUT)
+                    .build();
 
             when(inspectionJobRepository.findById(jobId)).thenReturn(Optional.of(job));
             when(inspectionJobRepository.save(job)).thenReturn(job);
@@ -255,7 +255,11 @@ class InspectionJobServiceImplTest {
             service.updateStatus(jobId, InspectionStatus.APPROVED);
 
             assertThat(job.getStatus()).isEqualTo(InspectionStatus.APPROVED);
-            verify(jobEventProducer, never()).publishJobCompleted(any());
+            ArgumentCaptor<JobEvent> evt = ArgumentCaptor.forClass(JobEvent.class);
+            verify(jobEventProducer).publishJobCompleted(evt.capture());
+            assertThat(evt.getValue().getAction()).isEqualTo(JobAction.JOB_COMPLETED);
+            assertThat(evt.getValue().getContractId()).isEqualTo(contractId);
+            assertThat(evt.getValue().getInspectionType()).isEqualTo("CHECK_OUT");
         }
 
         @Test
