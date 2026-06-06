@@ -366,6 +366,9 @@ public class InspectionJobServiceImpl implements InspectionJobService {
             return;
         }
         java.util.List<InspectionStatus> reviewStatuses = java.util.List.of(
+                InspectionStatus.CREATED,
+                InspectionStatus.SCHEDULED,
+                InspectionStatus.IN_PROGRESS,
                 InspectionStatus.PENDING_MANAGER_REVIEW,
                 InspectionStatus.DONE,
                 InspectionStatus.APPROVED

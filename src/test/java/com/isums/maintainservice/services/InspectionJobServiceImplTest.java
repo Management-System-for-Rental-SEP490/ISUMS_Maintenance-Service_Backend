@@ -371,6 +371,26 @@ class InspectionJobServiceImplTest {
         }
 
         @Test
+        @DisplayName("manager approval handles reviewed event arriving before reported event")
+        void managerApprovalHandlesOutOfOrderEvents() {
+            UUID contractId = UUID.randomUUID();
+            InspectionJob job = InspectionJob.builder()
+                    .id(jobId)
+                    .contractId(contractId)
+                    .status(InspectionStatus.IN_PROGRESS)
+                    .build();
+            when(inspectionJobRepository
+                    .findFirstByContractIdAndStatusInOrderByUpdatedAtDesc(
+                            eq(contractId), anyList()))
+                    .thenReturn(Optional.of(job));
+
+            service.markManagerReviewed(contractId, true);
+
+            assertThat(job.getStatus()).isEqualTo(InspectionStatus.APPROVED);
+            verify(inspectionJobRepository).save(job);
+        }
+
+        @Test
         @DisplayName("manager rejection moves inspection back to DONE")
         void managerRejects() {
             UUID contractId = UUID.randomUUID();
