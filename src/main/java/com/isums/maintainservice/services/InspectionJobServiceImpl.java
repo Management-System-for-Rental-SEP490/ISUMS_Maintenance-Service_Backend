@@ -15,10 +15,8 @@ import com.isums.maintainservice.exceptions.NotFoundException;
 import com.isums.maintainservice.infrastructures.i18n.MaintenanceMessageKeys;
 import com.isums.maintainservice.infrastructures.abstracts.InspectionJobService;
 import com.isums.maintainservice.domains.dtos.IssueQuoteDto;
-import com.isums.maintainservice.infrastructures.gRpc.HouseClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.QuoteClientsGrpc;
 import com.isums.maintainservice.infrastructures.gRpc.UserClientsGrpc;
-import com.isums.houseservice.grpc.HouseResponse;
 import com.isums.maintainservice.infrastructures.kafka.JobEventProducer;
 import com.isums.maintainservice.infrastructures.mappers.InspectionMapper;
 import com.isums.maintainservice.infrastructures.repositories.InspectionJobRepository;
@@ -39,11 +37,8 @@ import tools.jackson.core.type.TypeReference;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
@@ -58,7 +53,6 @@ public class InspectionJobServiceImpl implements InspectionJobService {
     private final MaintenanceJobHistoryRepository historyRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final QuoteClientsGrpc quoteClientsGrpc;
-    private final HouseClientsGrpc houseClientsGrpc;
     private final CachedPageService cachedPageService;
     private final TranslationAutoFillService translationAutoFillService;
     private final S3ServiceImpl s3Service;
@@ -159,8 +153,6 @@ public class InspectionJobServiceImpl implements InspectionJobService {
             return new InspectionDto(
                     job.getId(),
                     job.getHouseId(),
-                    null,
-                    null,
                     job.getContractId(),
                     job.getAssignedStaffId(),
                     staffName,
@@ -318,62 +310,7 @@ public class InspectionJobServiceImpl implements InspectionJobService {
                 .build();
         var pageable = SpringPageConverter.toPageable(request);
         Page<InspectionJob> page = inspectionJobRepository.findAll(spec, pageable);
-        Map<UUID, HouseResponse> houseCache = loadHouses(page.getContent());
-        return SpringPageConverter.fromPage(page, job -> enrichHouse(mapper.toDto(job), job, houseCache));
-    }
-
-    private Map<UUID, HouseResponse> loadHouses(Collection<InspectionJob> jobs) {
-        Map<UUID, HouseResponse> map = new ConcurrentHashMap<>();
-        jobs.stream()
-                .map(InspectionJob::getHouseId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .parallel()
-                .forEach(id -> {
-                    HouseResponse house = fetchHouse(id);
-                    if (house != null) {
-                        map.put(id, house);
-                    }
-                });
-        return map;
-    }
-
-    private HouseResponse fetchHouse(UUID houseId) {
-        try {
-            return houseClientsGrpc.getHouseById(houseId.toString());
-        } catch (Exception ex) {
-            log.warn("Unable to enrich inspection with house houseId={}: {}", houseId, ex.getMessage());
-            return null;
-        }
-    }
-
-    private String composeAddress(HouseResponse house) {
-        return java.util.stream.Stream.of(house.getAddress(), house.getWard(), house.getCommune(), house.getCity())
-                .filter(s -> s != null && !s.isBlank())
-                .collect(java.util.stream.Collectors.joining(", "));
-    }
-
-    private InspectionDto enrichHouse(InspectionDto dto, InspectionJob job, Map<UUID, HouseResponse> houseCache) {
-        HouseResponse house = job.getHouseId() == null ? null : houseCache.get(job.getHouseId());
-        String houseName = house != null ? house.getName() : null;
-        String houseAddress = house != null ? composeAddress(house) : null;
-        return new InspectionDto(
-                dto.id(),
-                dto.houseId(),
-                houseName,
-                houseAddress,
-                dto.contractId(),
-                dto.assignedStaffId(),
-                dto.staffName(),
-                dto.staffPhone(),
-                dto.slotId(),
-                dto.status(),
-                dto.type(),
-                dto.note(),
-                dto.housePhotoUrls(),
-                dto.createdAt(),
-                dto.updatedAt(),
-                dto.quote());
+        return SpringPageConverter.fromPage(page, mapper::toDto);
     }
 
     @Override

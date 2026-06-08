@@ -17,8 +17,6 @@ public abstract class InspectionMapper {
     @Autowired
     protected S3ServiceImpl s3Service;
 
-    @Mapping(target = "houseName", ignore = true)
-    @Mapping(target = "houseAddress", ignore = true)
     @Mapping(target = "staffName", ignore = true)
     @Mapping(target = "staffPhone", ignore = true)
     @Mapping(target = "note", expression = "java(resolveNote(job))")

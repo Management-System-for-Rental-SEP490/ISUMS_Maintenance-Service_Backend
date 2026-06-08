@@ -10,8 +10,6 @@ import java.util.UUID;
 public record InspectionDto(
         UUID id,
         UUID houseId,
-        String houseName,
-        String houseAddress,
         UUID contractId,
         UUID assignedStaffId,
         String staffName,
